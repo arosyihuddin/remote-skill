@@ -1,0 +1,13 @@
+[Unit]
+Description=Remote Skill Broker (VPS)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/rsk daemon
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,6 @@
+bin/
+rsk.db
+*.env
+*.log
+config.toml
+config.local.*
