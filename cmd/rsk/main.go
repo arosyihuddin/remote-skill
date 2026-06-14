@@ -34,7 +34,7 @@ var uiHTML string
 //go:embed rsk.service
 var serviceUnit []byte
 
-var Version = "0.1.0"
+var Version = "dev"
 
 func main() {
 	if len(os.Args) >= 2 {

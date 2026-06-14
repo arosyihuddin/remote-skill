@@ -19,7 +19,7 @@ import (
 	"github.com/pstar7/remote-skill/internal/proto"
 )
 
-var Version = "0.1.0"
+var Version = "dev"
 const maxConcurrentDispatches = 50
 
 // Node connects to a broker and runs handlers.
