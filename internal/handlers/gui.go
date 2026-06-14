@@ -20,7 +20,9 @@ import (
 
 func Screenshot(ctx context.Context, payload json.RawMessage, _ handler.StreamWriter) (any, error) {
 	var req proto.ScreenshotRequest
-	_ = json.Unmarshal(payload, &req)
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, err
+	}
 
 	// grim duluan — Wayland native, support -o outputName (multi-monitor)
 	img, err := screenshotGrim(ctx, req)
@@ -90,7 +92,9 @@ func screenshotGrim(ctx context.Context, req proto.ScreenshotRequest) (image.Ima
 
 func Click(ctx context.Context, payload json.RawMessage, _ handler.StreamWriter) (any, error) {
 	var req proto.ClickRequest
-	_ = json.Unmarshal(payload, &req)
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, err
+	}
 	if req.X != nil || req.Y != nil {
 		x, y := 0, 0
 		if req.X != nil {
@@ -197,9 +201,7 @@ func GetMonitors() ([]MonitorInfo, error) {
 }
 
 func Scroll(ctx context.Context, payload json.RawMessage, _ handler.StreamWriter) (any, error) {
-	var req struct {
-		DY int `json:"dy"`
-	}
+	var req proto.ScrollRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, err
 	}
@@ -223,29 +225,57 @@ func MouseMove(ctx context.Context, payload json.RawMessage, _ handler.StreamWri
 
 	mons, err := GetMonitors()
 	if err == nil && len(mons) > 0 {
-		totalW, totalH := 0, 0
+		minX, minY := 0, 0
+		maxX, maxY := 0, 0
 		for _, m := range mons {
-			if mx := m.X + m.Width; mx > totalW {
-				totalW = mx
+			if m.X < minX {
+				minX = m.X
 			}
-			if my := m.Y + m.Height; my > totalH {
-				totalH = my
+			if m.Y < minY {
+				minY = m.Y
+			}
+			if mx := m.X + m.Width; mx > maxX {
+				maxX = mx
+			}
+			if my := m.Y + m.Height; my > maxY {
+				maxY = my
 			}
 		}
 
-		if totalW > 0 && totalH > 0 {
+		canvasW := maxX - minX
+		canvasH := maxY - minY
+		if canvasW > 0 && canvasH > 0 {
+			absX := x
+			absY := y
 			if req.Monitor != nil {
 				idx := *req.Monitor
 				if idx >= 0 && idx < len(mons) {
 					m := mons[idx]
-					x += m.X
-					y += m.Y
+					absX = x + m.X
+					absY = y + m.Y
 				}
 			}
-			x = int(float64(x) / float64(totalW) * 65535)
-			y = int(float64(y) / float64(totalH) * 65535)
+			absX -= minX
+			absY -= minY
+			x = int(float64(absX) / float64(canvasW) * 65535)
+			y = int(float64(absY) / float64(canvasH) * 65535)
 		}
 	}
 
 	return proto.EmptyResult{OK: true}, platformMoveMouse(x, y)
+}
+
+func Drag(ctx context.Context, payload json.RawMessage, _ handler.StreamWriter) (any, error) {
+	var req proto.DragRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, err
+	}
+	btn := strings.ToLower(req.Button)
+	if btn == "" {
+		btn = "left"
+	}
+	if err := platformDragMouse(req.X1, req.Y1, req.X2, req.Y2, btn); err != nil {
+		return nil, err
+	}
+	return proto.EmptyResult{OK: true}, nil
 }

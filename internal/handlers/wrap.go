@@ -194,4 +194,8 @@ func (d *Deps) WrapMouse() handler.Handler            { return d.wrapGUI("mouse"
 func (d *Deps) WrapScroll() handler.Handler           { return d.wrapGUI("scroll", Scroll) }
 func (d *Deps) WrapClipboardRead() handler.Handler    { return d.wrapGUI("clipboard_read", ClipboardRead) }
 func (d *Deps) WrapClipboardWrite() handler.Handler   { return d.wrapGUI("clipboard_write", ClipboardWrite) }
+func (d *Deps) WrapDrag() handler.Handler             { return d.wrapGUI("drag", Drag) }
+func (d *Deps) WrapBoard() handler.Handler            { return d.wrapGUI("board", Board) }
+func (d *Deps) WrapWindows() handler.Handler          { return d.wrapGUI("windows", Windows) }
+func (d *Deps) WrapAccessibilityTree() handler.Handler { return d.wrapGUI("accessibility_tree", AccessibilityTree) }
 

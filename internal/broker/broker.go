@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -72,7 +73,7 @@ func (d *Device) SendRequest(ctx context.Context, t proto.MessageType, payload a
 	}
 	pr := &PendingResponse{
 		id:     id,
-		Stream: make(chan proto.Frame, 64),
+		Stream: make(chan proto.Frame, 256),
 		Final:  make(chan proto.Frame, 1),
 		stream: streaming,
 	}
@@ -104,7 +105,7 @@ func (d *Device) dispatchFrame(f proto.Frame) {
 		select {
 		case pr.Stream <- f:
 		default:
-			// drop if buffer full to avoid blocking the read loop
+			log.Printf("stream buffer full for request %s, dropping frame", f.ID)
 		}
 	case proto.TypeResponse, proto.TypeError:
 		pr.closeStream()
@@ -136,12 +137,20 @@ func (b *Broker) Register(d *Device) {
 }
 
 // Unregister removes a device only if it still owns the slot.
+// Cleans up all pending requests to prevent memory leaks.
 func (b *Broker) Unregister(d *Device) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if cur, ok := b.devices[d.ID]; ok && cur == d {
 		delete(b.devices, d.ID)
 	}
+	// Clean up all pending requests
+	d.pending.Range(func(key, value any) bool {
+		pr := value.(*PendingResponse)
+		pr.closeStream()
+		d.pending.Delete(key)
+		return true
+	})
 }
 
 // Get returns the device by id, or nil if not connected.

@@ -19,7 +19,8 @@ import (
 	"github.com/pstar7/remote-skill/internal/proto"
 )
 
-const Version = "0.1.0"
+var Version = "0.1.0"
+const maxConcurrentDispatches = 50
 
 // Node connects to a broker and runs handlers.
 type Node struct {
@@ -56,18 +57,19 @@ func (n *Node) RunForever(ctx context.Context, baseReconnect time.Duration) erro
 		}
 		if err != nil {
 			log.Printf("connection ended: %v; retrying in %s", err, delay)
+			// Exponential backoff capped at 30s
+			delay *= 2
+			if delay > 30*time.Second {
+				delay = 30 * time.Second
+			}
+		} else {
+			delay = baseReconnect
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(delay):
 		}
-		// Exponential backoff capped at 30s
-		delay *= 2
-		if delay > 30*time.Second {
-			delay = 30 * time.Second
-		}
-		// Reset on successful long session is handled below in runOnce.
 	}
 }
 
@@ -119,6 +121,7 @@ func (n *Node) runOnce(ctx context.Context) error {
 	log.Printf("connected to %s as %s", n.ServerURL, n.DeviceID)
 
 	// Read loop
+	dispatchSem := make(chan struct{}, maxConcurrentDispatches)
 	for {
 		_, data, err := c.Read(ctx)
 		if err != nil {
@@ -134,7 +137,11 @@ func (n *Node) runOnce(ctx context.Context) error {
 		case proto.TypePong:
 			// ignore
 		default:
-			go n.dispatch(ctx, f, c)
+			dispatchSem <- struct{}{}
+			go func() {
+				defer func() { <-dispatchSem }()
+				n.dispatch(ctx, f, c)
+			}()
 		}
 	}
 }

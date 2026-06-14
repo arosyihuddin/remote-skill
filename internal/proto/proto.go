@@ -39,6 +39,8 @@ const (
 	TypeWindows          MessageType = "windows"
 	TypeAccessibilityTree MessageType = "accessibility_tree"
 	TypeDevices          MessageType = "devices"      // CLI internal: list connected devices
+	TypeDrag             MessageType = "drag"         // mouse drag
+	TypeBoard            MessageType = "board"        // clipboard write + paste
 
 	// Responses (agent -> server)
 	TypeResponse MessageType = "response"
@@ -204,6 +206,25 @@ type ClipboardReadResult struct {
 type ClipboardWriteRequest struct {
 	Content string `json:"content"`
 	Primary bool   `json:"primary,omitempty"`
+}
+
+// ScrollRequest requests a mouse scroll.
+type ScrollRequest struct {
+	DY int `json:"dy"`
+}
+
+// DragRequest performs a mouse drag from (x1,y1) to (x2,y2).
+type DragRequest struct {
+	X1     int    `json:"x1"`
+	Y1     int    `json:"y1"`
+	X2     int    `json:"x2"`
+	Y2     int    `json:"y2"`
+	Button string `json:"button,omitempty"` // "left"|"right"|"middle"
+}
+
+// BoardRequest writes text to clipboard then pastes it.
+type BoardRequest struct {
+	Text string `json:"text"`
 }
 
 // EmptyResult is used for actions with no return data beyond ok.

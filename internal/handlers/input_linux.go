@@ -13,6 +13,7 @@ import (
 // ioctl commands for /dev/uinput
 const (
 	uiDevCreate  = 0x00005501  // _IO('U', 1)
+	uiDevDestroy = 0x00005502  // _IO('U', 2)
 	uiDevSetup   = 0x405c5503  // _IOW('U', 3, sizeof(struct uinput_setup)=92)
 	uiSetEvBit   = 0x40045564  // _IOW('U', 100, sizeof(int)=4)
 	uiSetKeyBit  = 0x40045565  // _IOW('U', 101, sizeof(int)=4)
@@ -209,6 +210,16 @@ func openUinput(name string, evTypes []uint16, keyCodes []uint16, relAxes []uint
 	time.Sleep(500 * time.Millisecond)
 
 	return &uinputDevice{fd: fd, name: name}, nil
+}
+
+func (d *uinputDevice) Close() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.fd != 0 {
+		_ = ioctl(d.fd, uiDevDestroy, 0) // ignore error, device may not exist yet
+		syscall.Close(d.fd)
+		d.fd = 0
+	}
 }
 
 func (d *uinputDevice) sendEvent(evType, code uint16, value int32) error {
@@ -437,6 +448,48 @@ func platformMoveMouseRel(x, y int) error {
 	m.sendEvent(evRel, relX, int32(x))
 	m.sendEvent(evRel, relY, int32(y))
 	return m.sync()
+}
+
+func platformDragMouse(x1, y1, x2, y2 int, btn string) error {
+	m, err := getMouse()
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var code uint16
+	switch btn {
+	case "right":
+		code = btnRight
+	case "middle":
+		code = btnMiddle
+	default:
+		code = btnLeft
+	}
+
+	m.sendEvent(evAbs, 0x00, int32(x1))
+	m.sendEvent(evAbs, 0x01, int32(y1))
+	m.sync()
+	sleep(50)
+
+	m.sendEvent(evKey, code, 1)
+	m.sync()
+	sleep(50)
+
+	steps := 20
+	for i := 1; i <= steps; i++ {
+		x := x1 + (x2-x1)*i/steps
+		y := y1 + (y2-y1)*i/steps
+		m.sendEvent(evAbs, 0x00, int32(x))
+		m.sendEvent(evAbs, 0x01, int32(y))
+		m.sync()
+		sleep(10)
+	}
+
+	m.sendEvent(evKey, code, 0)
+	m.sync()
+	return nil
 }
 
 func platformMouseScroll(dy int) error {

@@ -86,7 +86,7 @@ func LoadEnvFile(path string) (map[string]string, error) {
 func LoadServerConfig(path string) (ServerConfig, error) {
 	c := ServerConfig{
 		AgentListen: "0.0.0.0:7777",
-		SkillListen: "0.0.0.0:7800",
+		SkillListen: "127.0.0.1:7800",
 	}
 	if path != "" {
 		m, err := LoadEnvFile(path)

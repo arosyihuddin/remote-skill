@@ -17,6 +17,29 @@ import (
 	"github.com/pstar7/remote-skill/internal/proto"
 )
 
+func init() {
+	cleanOldTemp()
+}
+
+func cleanOldTemp() {
+	dir := os.TempDir()
+	entries, _ := os.ReadDir(dir)
+	now := time.Now()
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasPrefix(name, "rsk-screenshot-") && !strings.HasPrefix(name, "rsk-read-") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if now.Sub(info.ModTime()) > time.Hour {
+			os.Remove(dir + "/" + name)
+		}
+	}
+}
+
 func resolveServerURL() string {
 	if v := os.Getenv("RSK_SERVER"); v != "" {
 		return v
@@ -49,6 +72,8 @@ var knownCommands = map[string]bool{
 	"exec": true, "read": true, "write": true, "ls": true,
 	"screenshot": true, "click": true, "type": true, "key": true,
 	"mouse": true, "clip": true, "scroll": true, "devices": true,
+	"windows": true, "a11y": true, "drag": true, "board": true,
+	"wait": true, "env": true,
 	"-h": true, "--help": true, "help": true,
 }
 
@@ -74,6 +99,12 @@ func Run(command string, args []string) {
 		return
 	case "devices":
 		runDevices(serverURL, token)
+		return
+	case "wait":
+		runWait(args)
+		return
+	case "env":
+		runEnv()
 		return
 	}
 
@@ -205,6 +236,14 @@ func sendRequest(serverURL, token, device, cmdType string, payload any, stream b
 		msgType = proto.TypeClipboardRead
 	case "clip-set":
 		msgType = proto.TypeClipboardWrite
+	case "windows":
+		msgType = proto.TypeWindows
+	case "a11y":
+		msgType = proto.TypeAccessibilityTree
+	case "drag":
+		msgType = proto.TypeDrag
+	case "board":
+		msgType = proto.TypeBoard
 	case "devices":
 		msgType = proto.TypeDevices
 	default:
@@ -277,6 +316,14 @@ func buildPayload(cmd string, args []string) (any, error) {
 		return buildMousePayload(args)
 	case "scroll":
 		return buildScrollPayload(args)
+	case "windows":
+		return struct{}{}, nil
+	case "a11y":
+		return struct{}{}, nil
+	case "drag":
+		return buildDragPayload(args)
+	case "board":
+		return buildBoardPayload(args)
 	case "clip", "clip-get", "clip-set":
 		return buildClipPayload(args)
 	default:
@@ -482,9 +529,7 @@ func buildMousePayload(args []string) (any, error) {
 }
 
 func buildScrollPayload(args []string) (any, error) {
-	req := struct {
-		DY int `json:"dy"`
-	}{DY: -3}
+	req := proto.ScrollRequest{DY: -3}
 	for _, a := range args {
 		if a == "--up" {
 			req.DY = -absInt(req.DY)
@@ -523,6 +568,59 @@ func buildClipPayload(args []string) (any, error) {
 		return &proto.ClipboardWriteRequest{Content: args[1]}, nil
 	default:
 		return nil, fmt.Errorf("usage: rsk clip get|set")
+	}
+}
+
+func buildDragPayload(args []string) (any, error) {
+	if len(args) < 4 {
+		return nil, fmt.Errorf("usage: rsk drag <x1> <y1> <x2> <y2> [--button left|right|middle]")
+	}
+	x1, _ := strconv.Atoi(args[0])
+	y1, _ := strconv.Atoi(args[1])
+	x2, _ := strconv.Atoi(args[2])
+	y2, _ := strconv.Atoi(args[3])
+	req := &proto.DragRequest{X1: x1, Y1: y1, X2: x2, Y2: y2}
+	for _, a := range args[4:] {
+		if a == "--button" {
+			continue
+		}
+		switch a {
+		case "left", "right", "middle":
+			req.Button = a
+		}
+	}
+	return req, nil
+}
+
+func buildBoardPayload(args []string) (any, error) {
+	if len(args) == 0 || args[0] == "" {
+		return nil, fmt.Errorf("usage: rsk board \"<text>\"")
+	}
+	return &proto.BoardRequest{Text: args[0]}, nil
+}
+
+func runWait(args []string) {
+	if len(args) == 0 {
+		fmt.Fprintf(os.Stderr, "usage: rsk wait <seconds>\n")
+		os.Exit(2)
+	}
+	n, _ := strconv.Atoi(args[0])
+	if n <= 0 {
+		return
+	}
+	time.Sleep(time.Duration(n) * time.Second)
+}
+
+func runEnv() {
+	fmt.Printf("RSK_SERVER=%s\n", resolveServerURL())
+	token := resolveToken()
+	masked := token
+	if len(masked) > 8 {
+		masked = masked[:8] + "..." + masked[len(masked)-4:]
+	}
+	fmt.Printf("RSK_TOKEN=%s\n", masked)
+	if v := os.Getenv("RSK_DEVICE"); v != "" {
+		fmt.Printf("RSK_DEVICE=%s\n", v)
 	}
 }
 
@@ -646,5 +744,11 @@ func printUsage(_ string) {
 	fmt.Fprintf(os.Stderr, "  key \"<combo>\"           Send key combo\n")
 	fmt.Fprintf(os.Stderr, "  mouse <x> <y>           Move mouse\n")
 	fmt.Fprintf(os.Stderr, "  scroll [--dy N]         Scroll (default -3)\n")
+	fmt.Fprintf(os.Stderr, "  drag <x1> <y1> <x2> <y2>  Mouse drag\n")
+	fmt.Fprintf(os.Stderr, "  board \"<text>\"          Clipboard write + paste\n")
+	fmt.Fprintf(os.Stderr, "  windows                 List windows\n")
+	fmt.Fprintf(os.Stderr, "  a11y                    Accessibility tree\n")
+	fmt.Fprintf(os.Stderr, "  wait <sec>              Sleep N seconds\n")
+	fmt.Fprintf(os.Stderr, "  env                     Show env vars\n")
 	fmt.Fprintf(os.Stderr, "  clip get|set            Clipboard operations\n")
 }

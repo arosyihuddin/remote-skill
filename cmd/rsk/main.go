@@ -26,6 +26,7 @@ import (
 	"github.com/pstar7/remote-skill/internal/handler"
 	"github.com/pstar7/remote-skill/internal/handlers"
 	"github.com/pstar7/remote-skill/internal/proto"
+	"github.com/pstar7/remote-skill/internal/update"
 )
 
 //go:embed ui/index.html
@@ -33,6 +34,8 @@ var uiHTML string
 
 //go:embed rsk.service
 var serviceUnit []byte
+
+var Version = "0.1.0"
 
 func main() {
 	if len(os.Args) >= 2 {
@@ -49,6 +52,24 @@ func main() {
 		case "setup":
 			runSetup(os.Args[2:])
 			return
+		case "version":
+			printVersion()
+			return
+		case "update":
+			runUpdate()
+			return
+		case "status":
+			runStatus()
+			return
+		case "info":
+			runInfo()
+			return
+		case "restart":
+			runRestart()
+			return
+		case "log":
+			runLog(os.Args[2:])
+			return
 		case "-h", "--help", "help":
 			printUsage()
 			return
@@ -63,7 +84,7 @@ func main() {
 func runSetup(args []string) {
 	fs := flag.NewFlagSet("setup", flag.ExitOnError)
 	agentListen := fs.String("agent", "0.0.0.0:7777", "node WS listen address")
-	monitor := fs.String("monitor", "0.0.0.0:7800", "monitoring HTTP address")
+	monitor := fs.String("monitor", "127.0.0.1:7800", "monitoring HTTP address")
 	token := fs.String("token", "", "auth token (auto-generate if empty)")
 	uninstall := fs.Bool("uninstall", false, "remove installation")
 	_ = fs.Parse(args)
@@ -71,6 +92,31 @@ func runSetup(args []string) {
 	if *uninstall {
 		runUninstall()
 		return
+	}
+
+	home := os.Getenv("HOME")
+	configPath := filepath.Join(home, ".config", "rsk", "rsk.env")
+
+	// Check for existing config
+	if _, err := os.Stat(configPath); err == nil {
+		fmt.Printf("  ⚠ %s already exists\n", configPath)
+		fmt.Print("  Use existing configuration? [Y/n]: ")
+		var yn string
+		fmt.Scanln(&yn)
+		if yn != "n" && yn != "N" {
+			if m, err := config.LoadEnvFile(configPath); err == nil {
+				if v, ok := m["AGENT_LISTEN"]; ok && v != "" {
+					*agentListen = v
+				}
+				if v, ok := m["SKILL_LISTEN"]; ok && v != "" {
+					*monitor = v
+				}
+				if v, ok := m["TOKEN"]; ok && v != "" {
+					*token = v
+				}
+			}
+			fmt.Println("  ℹ using existing configuration")
+		}
 	}
 
 	if *token == "" {
@@ -81,8 +127,6 @@ func runSetup(args []string) {
 			*token = fmt.Sprintf("rsk-%d", time.Now().Unix())
 		}
 	}
-
-	home := os.Getenv("HOME")
 
 	// 1. Copy binary to ~/.local/bin/rsk
 	binDir := filepath.Join(home, ".local", "bin")
@@ -100,7 +144,6 @@ func runSetup(args []string) {
 	// 2. Config at ~/.config/rsk/rsk.env
 	configDir := filepath.Join(home, ".config", "rsk")
 	os.MkdirAll(configDir, 0755)
-	configPath := filepath.Join(configDir, "rsk.env")
 	content := fmt.Sprintf(`AGENT_LISTEN=%s
 SKILL_LISTEN=%s
 TOKEN=%s
@@ -109,11 +152,16 @@ TOKEN=%s
 	fmt.Printf("  ✔ config: %s\n", configPath)
 
 	// 3. Udev rule for /dev/uinput (need sudo)
-	udevRule := `KERNEL=="uinput", MODE="0666"`
-	exec.Command("sudo", "sh", "-c", fmt.Sprintf(
-		"echo '%s' > /etc/udev/rules.d/99-rsk-uinput.rules && udevadm control --reload-rules && udevadm trigger && chmod 0666 /dev/uinput",
-		udevRule)).Run()
-	fmt.Println("  ✔ /dev/uinput permission set")
+	udevRulePath := "/etc/udev/rules.d/99-rsk-uinput.rules"
+	if _, err := os.Stat(udevRulePath); os.IsNotExist(err) {
+		udevRule := `KERNEL=="uinput", MODE="0666"`
+		exec.Command("sudo", "sh", "-c", fmt.Sprintf(
+			"echo '%s' > %s && udevadm control --reload-rules && udevadm trigger && chmod 0666 /dev/uinput",
+			udevRule, udevRulePath)).Run()
+		fmt.Println("  ✔ /dev/uinput permission set")
+	} else {
+		fmt.Println("  ✔ /dev/uinput already configured")
+	}
 
 	// 4. Systemd user service
 	unitDir := filepath.Join(home, ".config", "systemd", "user")
@@ -168,6 +216,116 @@ func printToken() {
 	os.Exit(1)
 }
 
+func printVersion() {
+	fmt.Printf("rsk version %s\n", Version)
+}
+
+func runStatus() {
+	fmt.Printf("rsk %s\n", Version)
+
+	out, err := exec.Command("systemctl", "--user", "is-active", "rsk").Output()
+	if err != nil {
+		fmt.Println("  Service: not installed")
+		return
+	}
+	fmt.Printf("  Service: %s\n", strings.TrimSpace(string(out)))
+
+	configPath := filepath.Join(os.Getenv("HOME"), ".config", "rsk", "rsk.env")
+	if m, err := config.LoadEnvFile(configPath); err == nil {
+		if v, ok := m["AGENT_LISTEN"]; ok {
+			fmt.Printf("  Agent:   ws://%s/agent\n", v)
+		}
+		if v, ok := m["SKILL_LISTEN"]; ok {
+			fmt.Printf("  Monitor: http://%s/\n", v)
+		}
+	}
+	fmt.Println("  Devices: run `rsk devices`")
+}
+
+func runInfo() {
+	configPath := filepath.Join(os.Getenv("HOME"), ".config", "rsk", "rsk.env")
+	m, err := config.LoadEnvFile(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: config not found at %s\n", configPath)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Config: %s\n", configPath)
+	if v, ok := m["AGENT_LISTEN"]; ok {
+		fmt.Printf("  Agent:   ws://%s/agent\n", v)
+	}
+	if v, ok := m["SKILL_LISTEN"]; ok {
+		fmt.Printf("  Monitor: http://%s/\n", v)
+	}
+	if v, ok := m["TOKEN"]; ok && v != "" {
+		masked := v
+		if len(v) > 8 {
+			masked = v[:8] + "..." + v[len(v)-4:]
+		}
+		fmt.Printf("  Token:   %s\n", masked)
+	}
+}
+
+func runRestart() {
+	exec.Command("systemctl", "--user", "daemon-reload").Run()
+	if out, err := exec.Command("systemctl", "--user", "restart", "rsk").CombinedOutput(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: restart failed: %v\n%s\n", err, out)
+		os.Exit(1)
+	}
+	fmt.Println("✔ rsk restarted")
+}
+
+func runLog(args []string) {
+	cmdArgs := append([]string{"--user", "-u", "rsk", "-n", "50"}, args...)
+	cmd := exec.Command("journalctl", cmdArgs...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runUpdate() {
+	asset := update.AssetName("rsk")
+	fmt.Printf("Downloading latest %s ...\n", asset)
+
+	tmp, err := update.DownloadLatest("pstar7", "remote-skill", asset)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	defer os.Remove(tmp)
+
+	if ver, err := update.VersionOf(tmp); err == nil {
+		if ver == Version {
+			if Version != "dev" {
+				fmt.Printf("Already up to date (%s)\n", ver)
+				return
+			}
+			fmt.Printf("Version %s (dev), updating anyway...\n", ver)
+		} else {
+			fmt.Printf("Updating %s -> %s ...\n", Version, ver)
+		}
+	} else {
+		fmt.Printf("Warning: cannot check version (%v), proceeding...\n", err)
+	}
+
+	if err := update.ReplaceSelf(tmp); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("Binary updated, restarting service...")
+
+	if err := update.RestartService("rsk"); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+		fmt.Println("Restart manually: systemctl --user restart rsk")
+		os.Exit(1)
+	}
+	fmt.Println("rsk restarted")
+}
+
 func printUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n")
 	fmt.Fprintf(os.Stderr, "  rsk <command> [args...]\n")
@@ -179,6 +337,12 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  daemon              Start the broker daemon\n")
 	fmt.Fprintf(os.Stderr, "  setup               Install as user service\n")
 	fmt.Fprintf(os.Stderr, "  uninstall           Remove installation\n")
+	fmt.Fprintf(os.Stderr, "  version             Print version\n")
+	fmt.Fprintf(os.Stderr, "  update              Self-update from GitHub\n")
+	fmt.Fprintf(os.Stderr, "  status              Show service status\n")
+	fmt.Fprintf(os.Stderr, "  info                Show config summary\n")
+	fmt.Fprintf(os.Stderr, "  restart             Restart service\n")
+	fmt.Fprintf(os.Stderr, "  log [args]          Tail journal logs\n")
 	fmt.Fprintf(os.Stderr, "  token               Print auth token\n")
 	fmt.Fprintf(os.Stderr, "  devices             List connected devices\n")
 	fmt.Fprintf(os.Stderr, "  exec \"<cmd>\"        Run a command on remote node\n")
@@ -190,6 +354,13 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  type \"<text>\"       Type text\n")
 	fmt.Fprintf(os.Stderr, "  key \"<combo>\"       Send key combo\n")
 	fmt.Fprintf(os.Stderr, "  mouse <x> <y>       Move mouse\n")
+	fmt.Fprintf(os.Stderr, "  scroll [--dy N]     Scroll (default -3)\n")
+	fmt.Fprintf(os.Stderr, "  drag <x1> <y1> <x2> <y2>  Mouse drag\n")
+	fmt.Fprintf(os.Stderr, "  board \"<text>\"      Clipboard write + paste\n")
+	fmt.Fprintf(os.Stderr, "  windows             List windows\n")
+	fmt.Fprintf(os.Stderr, "  a11y                Accessibility tree\n")
+	fmt.Fprintf(os.Stderr, "  wait <sec>          Sleep N seconds\n")
+	fmt.Fprintf(os.Stderr, "  env                 Show env vars\n")
 	fmt.Fprintf(os.Stderr, "  clip get|set        Clipboard operations\n")
 }
 
@@ -229,8 +400,11 @@ func runDaemon(args []string) {
 
 	// Monitoring HTTP (:7800)
 	monMux := http.NewServeMux()
-	registerMonitoringRoutes(monMux, br, database)
-	monSrv := &http.Server{Addr: cfg.SkillListen, Handler: monMux}
+	registerMonitoringRoutes(monMux, br, database, cfg.Token)
+	monSrv := &http.Server{
+		Addr:    cfg.SkillListen,
+		Handler: authMiddleware(cfg.Token, monMux),
+	}
 
 	go func() {
 		log.Printf("agent WS listening on %s", cfg.AgentListen)
@@ -364,7 +538,22 @@ func readReqJSON(r *http.Request, v any) error {
 	return dec.Decode(v)
 }
 
-func registerMonitoringRoutes(mux *http.ServeMux, br *broker.Broker, database *db.DB) {
+func authMiddleware(token string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if strings.HasPrefix(auth, "Bearer ") && strings.TrimPrefix(auth, "Bearer ") == token {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if r.URL.Query().Get("token") == token {
+			next.ServeHTTP(w, r)
+			return
+		}
+		writeErr(w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
+	})
+}
+
+func registerMonitoringRoutes(mux *http.ServeMux, br *broker.Broker, database *db.DB, token string) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
@@ -397,9 +586,9 @@ func registerMonitoringRoutes(mux *http.ServeMux, br *broker.Broker, database *d
 	mux.HandleFunc("/mouse", handleCall(br, proto.TypeMouse, func() any { return &proto.MouseMoveRequest{} }))
 	mux.HandleFunc("/clipboard/read", handleCall(br, proto.TypeClipboardRead, func() any { return &proto.ClipboardReadRequest{} }))
 	mux.HandleFunc("/clipboard/write", handleCall(br, proto.TypeClipboardWrite, func() any { return &proto.ClipboardWriteRequest{} }))
-	mux.HandleFunc("/scroll", handleLocalGUI(handlers.Scroll))
-	mux.HandleFunc("/windows", handleLocalGUI(handlers.Windows))
-	mux.HandleFunc("/a11y/tree", handleLocalGUI(handlers.AccessibilityTree))
+	mux.HandleFunc("/scroll", handleCall(br, proto.TypeScroll, func() any { return &proto.ScrollRequest{} }))
+	mux.HandleFunc("/windows", handleCall(br, proto.TypeWindows, func() any { return &struct{}{} }))
+	mux.HandleFunc("/a11y/tree", handleCall(br, proto.TypeAccessibilityTree, func() any { return &struct{}{} }))
 	mux.HandleFunc("/screen.ws", handlers.ServeScreenWS)
 	mux.HandleFunc("/exec/stream", handleExecStream(br))
 

@@ -14,6 +14,8 @@ func platformMoveMouseRel(x, y int) error { return errNoInput }
 
 func platformMouseScroll(dy int) error { return errNoInput }
 
+func platformDragMouse(x1, y1, x2, y2 int, btn string) error { return errNoInput }
+
 func platformTypeText(text string) error { return errNoInput }
 
 func platformKeyCombo(parts []string) error { return errNoInput }

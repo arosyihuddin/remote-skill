@@ -82,14 +82,20 @@ func screenLoop(stop chan struct{}) {
 				continue
 			}
 			screenMu.Lock()
+			clients := make([]*screenClient, 0, len(screenClients))
 			for cl := range screenClients {
-				go func(c *screenClient) {
-					c.mu.Lock()
-					defer c.mu.Unlock()
-					_ = c.conn.Write(context.Background(), websocket.MessageBinary, frame)
-				}(cl)
+				clients = append(clients, cl)
 			}
 			screenMu.Unlock()
+			for _, cl := range clients {
+				go func(c *screenClient) {
+					writeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					defer cancel()
+					c.mu.Lock()
+					defer c.mu.Unlock()
+					_ = c.conn.Write(writeCtx, websocket.MessageBinary, frame)
+				}(cl)
+			}
 		}
 	}
 }
