@@ -41,12 +41,12 @@ var depsByEnv = map[string][]dep{
 	},
 	"hyprland": {
 		{Name: "hyprctl", Pkg: "", Desc: "window list (comes with Hyprland)", AutoInstall: false},
-		{Name: "grim", Pkg: "grim", Desc: "screenshot capture", AutoInstall: false},
-		{Name: "wlr-randr", Pkg: "wlr-randr", Desc: "display monitor info", AutoInstall: false},
+		{Name: "grim", Pkg: "grim", Desc: "screenshot capture", AutoInstall: true},
+		{Name: "wlr-randr", Pkg: "wlr-randr", Desc: "display monitor info", AutoInstall: true},
 	},
 	"wayland": {
-		{Name: "grim", Pkg: "grim", Desc: "screenshot capture", AutoInstall: false},
-		{Name: "wlr-randr", Pkg: "wlr-randr", Desc: "display monitor info", AutoInstall: false},
+		{Name: "grim", Pkg: "grim", Desc: "screenshot capture", AutoInstall: true},
+		{Name: "wlr-randr", Pkg: "wlr-randr", Desc: "display monitor info", AutoInstall: true},
 	},
 }
 
@@ -245,7 +245,7 @@ func runSetup(args []string) {
 	}
 	for _, d := range warnMissing {
 		if d.Pkg != "" {
-			fmt.Printf("  ⚠ %s not found (%s) — install: sudo %s install -y %s\n", d.Name, d.Desc, pm, d.Pkg)
+			fmt.Printf("  ⚠ %s not found (%s) — install: %s\n", d.Name, d.Desc, pmInstallCmd(pm, d.Pkg))
 		} else {
 			fmt.Printf("  ⚠ %s not found (%s) — install manually\n", d.Name, d.Desc)
 		}
@@ -430,7 +430,7 @@ func detectDesktop() string {
 }
 
 func detectPM() string {
-	for _, pm := range []string{"apt", "dnf", "pacman", "zypper", "apk"} {
+	for _, pm := range []string{"apt", "dnf", "yum", "pacman", "zypper", "apk"} {
 		if _, err := exec.LookPath(pm); err == nil {
 			return pm
 		}
@@ -448,6 +448,19 @@ func checkDeps(env string) []dep {
 	return missing
 }
 
+func pmInstallCmd(pm, pkg string) string {
+	switch pm {
+	case "pacman":
+		return fmt.Sprintf("sudo pacman -S %s", pkg)
+	case "apk":
+		return fmt.Sprintf("sudo apk add %s", pkg)
+	case "apt", "dnf", "yum", "zypper":
+		return fmt.Sprintf("sudo %s install -y %s", pm, pkg)
+	default:
+		return fmt.Sprintf("sudo %s install -y %s", pm, pkg)
+	}
+}
+
 func installPkgs(pm string, pkgs []string) error {
 	if len(pkgs) == 0 {
 		return nil
@@ -459,7 +472,7 @@ func installPkgs(pm string, pkgs []string) error {
 	switch pm {
 	case "apt":
 		args = []string{"install", "-y"}
-	case "dnf", "zypper":
+	case "dnf", "yum", "zypper":
 		args = []string{"install", "-y"}
 	case "pacman":
 		args = []string{"-S", "--noconfirm"}
