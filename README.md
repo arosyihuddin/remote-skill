@@ -1,187 +1,239 @@
-# remote-skill 🔌
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-linux-blue?style=flat-square">
+  <img src="https://img.shields.io/badge/go-1.23+-00ADD8?style=flat-square&logo=go">
+  <img src="https://img.shields.io/github/v/release/arosyihuddin/remote-skill?style=flat-square">
+  <img src="https://img.shields.io/github/license/arosyihuddin/remote-skill?style=flat-square">
+</p>
 
-[![Linux](https://img.shields.io/badge/platform-linux-blue)]()
+<h1 align="center">remote-skill</h1>
+<p align="center">
+  <em>Realtime remote control for Linux workstations — shell, files, GUI, clipboard.</em>
+</p>
 
-> Bridge for AI agents (or CLI) to control a Linux workstation in real-time over WebSocket.
+<p align="center">
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#features">Features</a> •
+  <a href="#usage">Usage</a> •
+  <a href="#architecture">Architecture</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#configuration">Configuration</a>
+</p>
 
 ---
 
-## Quick Start ⚡
+## Quick Start
+
+**Two machines, five commands.**
 
 ```bash
-# server (VPS)
+# ── server (VPS) ──────────────────────────────────────
 wget https://github.com/arosyihuddin/remote-skill/releases/latest/download/rsk-linux-amd64 -O rsk
-chmod +x rsk
-./rsk setup
+chmod +x rsk && ./rsk setup
 
-# node (laptop)
+# ── laptop (node) ─────────────────────────────────────
 wget https://github.com/arosyihuddin/remote-skill/releases/latest/download/rsk-node-linux-amd64 -O rsk-node
-chmod +x rsk-node
-./rsk-node setup --server ws://vps:7777/agent
+chmod +x rsk-node && ./rsk-node setup
 ```
 
-Done. Service runs automatically — `systemctl --user rsk` / `rsk-node`.
+Both run as systemd user services. Done.
+
+```bash
+# Test it:
+rsk exec "uname -a"
+rsk screenshot
+```
 
 ---
 
 ## Features
 
-| Category | Commands |
-|---|---|
-| **Shell** | `exec`, `read`, `write`, `ls` |
-| **GUI** | `screenshot`, `click`, `type`, `key`, `mouse`, `scroll`, `drag` |
-| **Clipboard** | `clip get`, `clip set`, `board` (write + paste) |
-| **System** | `windows` (list windows), `a11y` (accessibility tree) |
-| **Device** | `devices` (list connected), multi-device via ID prefix |
-| **Service** | `setup`, `uninstall`, `version`, `status`, `info`, `restart`, `log` |
-| **Update** | `update` (self-update from GitHub), `env`, `wait` |
+| Capability | Commands | What it does |
+|---|---|---|
+| **Shell execution** | `exec` | Run any command, stream stdout/stderr, timeout |
+| **File operations** | `read`, `write`, `ls` | Transfer files, edit configs, browse directories |
+| **Screenshots** | `screenshot` | Capture full screen or specific output |
+| **Input automation** | `click`, `type`, `key`, `mouse`, `scroll`, `drag` | Click buttons, type text, send shortcuts, drag & drop |
+| **Clipboard** | `clip`, `board` | Read/write clipboard, or write + paste in one shot |
+| **System introspection** | `windows`, `a11y` | List open windows, dump accessibility tree |
+| **Device management** | `devices` | List connected nodes, target specific device |
+| **Service lifecycle** | `setup`, `uninstall`, `restart`, `status`, `info`, `log` | Install, manage, and monitor the daemon |
+| **Self-update** | `update` | Download latest release and restart automatically |
+
+<details>
+<summary><b>Full command reference</b></summary>
+
+```bash
+rsk exec "<cmd>" [--shell] [--cwd PATH] [--timeout N] [--stream]
+rsk read <path> [--binary] [--max N]
+rsk write <path> [--file LOCAL] [--append]
+rsk ls <path> [--hidden]
+rsk screenshot [--region WxH+X+Y] [--output NAME]
+rsk click [--x N] [--y N] [--button left|right|middle] [--double]
+rsk type "<text>"
+rsk key "<combo>"              # e.g. "ctrl+c", "Return", "Super+v"
+rsk mouse <x> <y> [--relative]
+rsk scroll [--dy N] [--up|--down]
+rsk drag <x1> <y1> <x2> <y2> [--button left|right|middle]
+rsk clip get|set "<text>"
+rsk board "<text>"             # clipboard write + paste
+rsk windows
+rsk a11y
+rsk devices
+rsk wait <sec>
+rsk env
+```
+</details>
+
+---
+
+## Usage
+
+### Command syntax
+
+```bash
+rsk <command> [args...]              # auto-selects single device
+rsk <device-id> <command> [args...]  # target specific node
+```
+
+### Service commands
+
+```bash
+rsk version           # print version
+rsk status            # service status + config summary
+rsk info              # detailed config (token masked)
+rsk restart           # restart daemon
+rsk log -n 100        # last 100 journal entries
+rsk log -f            # follow logs
+rsk update            # self-update from GitHub release
+```
+
+### Multi-device example
+
+```bash
+# Two laptops connected. Auto-detection won't work — specify target.
+rsk desktop-home exec "echo hello"
+rsk macbook-work exec "echo hello"
+rsk desktop-home screenshot --save ~/shot.png
+```
 
 ---
 
 ## Architecture
 
 ```
-┌──────────────────────────┐         ┌──────────────────────────┐
-│  VPS                     │         │  Laptop / device         │
-│                          │  WS     │                          │
-│  ┌────────────────────┐  │ outbound│  ┌────────────────────┐  │
-│  │ rsk (daemon)       │<─┼─────────┼──│ rsk-node           │  │
-│  │ :7777 (broker)     │  │         │  │ (daemon)           │  │
-│  │ :7800 (monitor)    │  │         │  └────────────────────┘  │
-│  └────────────────────┘  │         │   exec / file / GUI      │
-│         │                 │         │                          │
-│    rsk exec "ls"         │         └──────────────────────────┘
-│    (CLI mode, WS)        │
-└──────────────────────────┘
+  ┌────────────────────────────────────────────────────────────────┐
+  │                        VPS / Server                            │
+  │                                                                │
+  │  ┌─────────────────────────────────────────┐                   │
+  │  │   rsk daemon                            │                   │
+  │  │                                         │                   │
+  │  │  ┌─────────┐   ┌──────────────┐        │                   │
+  │  │  │ WS      │   │ HTTP monitor  │        │                   │
+  │  │  │ broker  │   │ :7800         │        │                   │
+  │  │  │ :7777   │   │ (auth req)    │        │                   │
+  │  │  └────┬────┘   └──────────────┘        │                   │
+  │  └───────┼─────────────────────────────────┘                   │
+  └──────────┼─────────────────────────────────────────────────────┘
+             │ WebSocket
+  ┌──────────┼─────────────────────────────────────────────────────┐
+  │  ┌───────┴──────┐                                             │
+  │  │   rsk-node   │  ┌──────────────────────────────────────┐   │
+  │  │  (daemon)    │  │  Handlers:                            │   │
+  │  │              │  │  exec → read → write → ls             │   │
+  │  │  Dial-out    │  │  screenshot → click → type → key      │   │
+  │  │  connects to │  │  mouse → scroll → drag → clipboard    │   │
+  │  │  broker      │  │  windows → a11y                       │   │
+  │  └──────────────┘  └──────────────────────────────────────┘   │
+  │                        Laptop / Workstation                    │
+  └────────────────────────────────────────────────────────────────┘
 ```
 
-**Components:**
+**How it works:**
 
-| Component | Role |
-|---|---|
-| `cmd/rsk` | Broker daemon (`:7777` WS + `:7800` HTTP monitor) + CLI mode |
-| `cmd/node` | Client daemon on laptop — dials out to broker, executes requests |
-| `internal/cli` | WS-based CLI — connect, send request, print response |
-| `internal/broker` | Device registry + request routing |
-| `internal/handlers` | exec / file / GUI handlers (Linux/Wayland) |
-| `internal/proto` | JSON wire protocol |
+1. `rsk` daemon listens on `:7777` (WebSocket broker) and `:7800` (HTTP monitor).
+2. `rsk-node` connects outbound to the broker — no open ports needed on the laptop.
+3. CLI connects to `:7777/cli`, sends a command frame, broker forwards to the right node.
+4. Node executes, streams back response, CLI prints it.
 
 ---
 
-## Usage
+## Installation
 
-### CLI
+### Option 1: Binary download (recommended)
 
-```bash
-# Single device — auto-detect
-rsk exec "ls -la"
-rsk screenshot
-
-# Multi-device — specify device-id
-rsk my-laptop exec "echo hi"
-
-# Or via env
-export RSK_DEVICE=my-laptop
-rsk exec "ls -la"
-```
-
-### Service management
+Download the latest release binary. No Go toolchain needed.
 
 ```bash
-rsk status              # service status + config
-rsk info                # config summary (token masked)
-rsk restart             # restart service
-rsk log                 # tail 50 journal entries
-rsk log -f              # follow logs
+# Find the latest version:
+# https://github.com/arosyihuddin/remote-skill/releases
+
+wget https://github.com/arosyihuddin/remote-skill/releases/latest/download/rsk-linux-amd64 -O rsk
+wget https://github.com/arosyihuddin/remote-skill/releases/latest/download/rsk-node-linux-amd64 -O rsk-node
+chmod +x rsk rsk-node
 ```
 
-### Self-update
-
-```bash
-rsk update              # update daemon from GitHub release
-rsk-node update         # update node
-```
-
-Binary is atomically replaced and service restarted automatically.
-
----
-
-## Setup guides
-
-### Daemon
-
-```bash
-rsk setup
-# or:  rsk setup --agent 0.0.0.0:7777 --monitor 127.0.0.1:7800 --token mytoken
-```
-
-Config: `~/.config/rsk/rsk.env`. Service: `systemctl --user rsk`.
-
-### Node
-
-```bash
-rsk-node setup --server ws://vps:7777/agent
-# or:  rsk-node setup --server ws://vps:7777/agent --device my-laptop --token secret123
-```
-
-Auto-configures:
-- `/dev/uinput` udev rule (keyboard/mouse)
-- Token auto-read from daemon config (same machine)
-- Config `~/.config/rsk/node.env`
-- Binary copy to `~/.local/bin/rsk-node`
-- systemd user service install + enable
-
----
-
-## Development
+### Option 2: Build from source
 
 ```bash
 git clone https://github.com/arosyihuddin/remote-skill.git
 cd remote-skill
 ./build.sh
 
-# Setup from local build
-./bin/rsk setup
-./bin/rsk-node setup
-```
-
-Build release binaries (cross-compiled for `linux/amd64`):
-
-```bash
+# Build release binaries (cross-compiled linux/amd64):
 ./build.sh release
-# output: bin/rsk-linux-amd64 + bin/rsk-node-linux-amd64
 ```
 
-### Smoke test (local, no VPS)
+### Smoke test
 
 ```bash
-# terminal 1 — broker
-RSK_TOKEN=test123 rsk daemon
+# terminal 1 — broker (VPS)
+RSK_TOKEN=test123 ./bin/rsk daemon
 
-# terminal 2 — node
-RSK_TOKEN=test123 rsk-node
+# terminal 2 — node (laptop)
+RSK_TOKEN=test123 ./bin/rsk-node
 
 # terminal 3 — CLI
-rsk exec "echo hi"
+./bin/rsk exec "echo hello from remote"
 ```
 
 ---
 
-## Multi-device
+## Configuration
 
-Each device needs a unique `DEVICE_ID` in its config (e.g. `laptop-pstar7`, `desktop-home`). CLI can specify the target as the first argument. Auto-selected if only one device is connected.
+Both daemon and node use simple `KEY=VALUE` config files.
+
+### Daemon (`~/.config/rsk/rsk.env`)
+
+```
+AGENT_LISTEN=0.0.0.0:7777     # WS broker address
+SKILL_LISTEN=127.0.0.1:7800   # HTTP monitor address
+TOKEN=<auto-generated>         # shared secret
+```
+
+Set via `rsk setup` or edit manually. Env overrides: `RSK_AGENT_LISTEN`, `RSK_MONITOR`, `RSK_TOKEN`.
+
+### Node (`~/.config/rsk/node.env`)
+
+```
+SERVER_URL=ws://vps:7777/agent  # broker URL
+DEVICE_ID=my-laptop              # unique identifier
+TOKEN=<same-as-daemon>           # must match daemon
+ALLOW_GUI=true                   # enable screenshot, click, etc.
+```
+
+Set via `rsk-node setup` or edit manually. Env overrides: `RSK_NODE_SERVER_URL`, `RSK_NODE_DEVICE_ID`, `RSK_TOKEN`.
 
 ---
 
 ## Security
 
-- Single shared `TOKEN` authenticates both nodes and CLI clients.
-- Monitoring HTTP (`:7800`) should bind to `127.0.0.1` — change to `0.0.0.0` only if remote browser access is needed with auth.
-- WS broker (`:7777`) should bind to mesh VPN IP only (e.g. `100.116.138.90:7777`).
-- Anyone with the token can execute commands. Treat `TOKEN` as a root credential.
+- **Single shared token** authenticates nodes, CLI clients, and HTTP monitor.
+- **WS broker** (`:7777`) should bind to a mesh VPN IP, not `0.0.0.0`.
+- **HTTP monitor** (`:7800`) requires `Authorization: Bearer <token>` or `?token=` query param.
+- Treat the **TOKEN** as a root credential — anyone with it can execute arbitrary commands on connected nodes.
 
 ---
 
 ## License
 
-MIT
+[MIT](LICENSE)
