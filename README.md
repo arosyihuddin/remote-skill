@@ -16,7 +16,8 @@
   <a href="#usage">Usage</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#installation">Installation</a> •
-  <a href="#configuration">Configuration</a>
+  <a href="#configuration">Configuration</a> •
+  <a href="#ai-integration">AI</a>
 </p>
 
 ---
@@ -223,6 +224,16 @@ ALLOW_GUI=true                   # enable screenshot, click, etc.
 ```
 
 Set via `rsk-node setup` or edit manually. Env overrides: `RSK_NODE_SERVER_URL`, `RSK_NODE_DEVICE_ID`, `RSK_TOKEN`.
+
+---
+
+## AI Integration
+
+Untuk instalasi oleh AI agent, gunakan panduan berikut:
+
+```
+https://raw.githubusercontent.com/arosyihuddin/remote-skill/main/INSTALL.md
+```
 
 ---
 
