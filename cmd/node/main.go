@@ -412,7 +412,7 @@ func runUpdate() {
 	asset := update.AssetName("rsk-node")
 	fmt.Printf("Downloading latest %s ...\n", asset)
 
-	tmp, err := update.DownloadLatest("pstar7", "remote-skill", asset)
+	tmp, err := update.DownloadLatest("arosyihuddin", "remote-skill", asset)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -64,20 +65,35 @@ func ReplaceSelf(newPath string) error {
 		return fmt.Errorf("read /proc/self/exe: %w", err)
 	}
 
-	backup := self + ".bak"
-	os.Remove(backup)
-
-	if err := os.Rename(newPath, self); err != nil {
-		data, rErr := os.ReadFile(newPath)
-		if rErr != nil {
-			return fmt.Errorf("read new binary: %w", rErr)
-		}
-		if wErr := os.WriteFile(self, data, 0755); wErr != nil {
-			return fmt.Errorf("write self: %w", wErr)
-		}
+	data, err := os.ReadFile(newPath)
+	if err != nil {
+		return fmt.Errorf("read new binary: %w", err)
 	}
 
-	os.Remove(backup)
+	// Create temp on same filesystem as target so rename works atomically
+	tmp, err := os.CreateTemp(filepath.Dir(self), ".rsk-update-*")
+	if err != nil {
+		return fmt.Errorf("temp on target dir: %w", err)
+	}
+	tmpPath := tmp.Name()
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("write temp: %w", err)
+	}
+	if err := tmp.Chmod(0755); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("chmod temp: %w", err)
+	}
+	tmp.Close()
+
+	if err := os.Rename(tmpPath, self); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("rename: %w", err)
+	}
+
 	return nil
 }
 
