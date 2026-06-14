@@ -53,7 +53,7 @@ func encodePNG(img image.Image) (any, error) {
 	}, nil
 }
 
-func screenshotX11(ctx context.Context, req proto.ScreenshotRequest) (image.Image, error) {
+func screenshotX11(_ context.Context, req proto.ScreenshotRequest) (image.Image, error) {
 	if req.Region != "" {
 		var x, y, w, h int
 		if _, err := fmt.Sscanf(req.Region, "%d,%d %dx%d", &x, &y, &w, &h); err != nil {

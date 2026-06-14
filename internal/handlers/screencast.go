@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	screenFPS         = 5
 	screenPeriod      = 200 * time.Millisecond
 	screenJPEGQuality = 70
 )

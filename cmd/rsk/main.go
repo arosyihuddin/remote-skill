@@ -23,7 +23,6 @@ import (
 	"github.com/pstar7/remote-skill/internal/cli"
 	"github.com/pstar7/remote-skill/internal/config"
 	"github.com/pstar7/remote-skill/internal/db"
-	"github.com/pstar7/remote-skill/internal/handler"
 	"github.com/pstar7/remote-skill/internal/handlers"
 	"github.com/pstar7/remote-skill/internal/proto"
 	"github.com/pstar7/remote-skill/internal/update"
@@ -371,7 +370,9 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  drag <x1> <y1> <x2> <y2>  Mouse drag\n")
 	fmt.Fprintf(os.Stderr, "  board \"<text>\"      Clipboard write + paste\n")
 	fmt.Fprintf(os.Stderr, "  windows             List windows\n")
-	fmt.Fprintf(os.Stderr, "  a11y                Accessibility tree\n")
+	fmt.Fprintf(os.Stderr, "  a11y [--id N] [--depth N] [--role name] [--show-all] [--monitor N] [--all]\n")
+	fmt.Fprintf(os.Stderr, "                        Accessibility tree in Toon CSV (--monitor: filter by monitor, --all: all monitors)\n")
+	fmt.Fprintf(os.Stderr, "  monitors            List monitors\n")
 	fmt.Fprintf(os.Stderr, "  wait <sec>          Sleep N seconds\n")
 	fmt.Fprintf(os.Stderr, "  env                 Show env vars\n")
 	fmt.Fprintf(os.Stderr, "  clip get|set        Clipboard operations\n")
@@ -602,6 +603,7 @@ func registerMonitoringRoutes(mux *http.ServeMux, br *broker.Broker, database *d
 	mux.HandleFunc("/scroll", handleCall(br, proto.TypeScroll, func() any { return &proto.ScrollRequest{} }))
 	mux.HandleFunc("/windows", handleCall(br, proto.TypeWindows, func() any { return &struct{}{} }))
 	mux.HandleFunc("/a11y/tree", handleCall(br, proto.TypeAccessibilityTree, func() any { return &struct{}{} }))
+	mux.HandleFunc("/monitors", handleCall(br, proto.TypeMonitors, func() any { return &proto.MonitorsRequest{} }))
 	mux.HandleFunc("/screen.ws", handlers.ServeScreenWS)
 	mux.HandleFunc("/exec/stream", handleExecStream(br))
 
@@ -777,32 +779,6 @@ func pickDevice(br *broker.Broker, r *http.Request) (string, error) {
 		id = r.Header.Get("X-Device-ID")
 	}
 	return br.PickDeviceID(id)
-}
-
-func handleLocalGUI(h func(ctx context.Context, payload json.RawMessage, sw handler.StreamWriter) (any, error)) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			writeErr(w, 405, fmt.Errorf("POST only"))
-			return
-		}
-		var raw json.RawMessage
-		if r.ContentLength > 0 {
-			if err := readReqJSON(r, &raw); err != nil {
-				writeErr(w, 400, fmt.Errorf("bad json: %w", err))
-				return
-			}
-		}
-		if raw == nil {
-			raw = json.RawMessage("{}")
-		}
-		ctx := r.Context()
-		res, err := h(ctx, raw, handler.StreamWriter{})
-		if err != nil {
-			writeErr(w, 500, err)
-			return
-		}
-		writeJSON(w, 200, res)
-	}
 }
 
 

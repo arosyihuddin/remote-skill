@@ -1,3 +1,4 @@
+// Package cli implements the rsk command-line interface.
 package cli
 
 import (
@@ -35,7 +36,7 @@ func cleanOldTemp() {
 			continue
 		}
 		if now.Sub(info.ModTime()) > time.Hour {
-			os.Remove(dir + "/" + name)
+			_ = os.Remove(dir + "/" + name)
 		}
 	}
 }
@@ -72,7 +73,7 @@ var knownCommands = map[string]bool{
 	"exec": true, "read": true, "write": true, "ls": true,
 	"screenshot": true, "click": true, "type": true, "key": true,
 	"mouse": true, "clip": true, "scroll": true, "devices": true,
-	"windows": true, "a11y": true, "drag": true, "board": true,
+	"windows": true, "a11y": true, "monitors": true, "drag": true, "board": true,
 	"wait": true, "env": true,
 	"-h": true, "--help": true, "help": true,
 }
@@ -154,7 +155,12 @@ func Run(command string, args []string) {
 			printRead(resp.Final.(json.RawMessage), savePath)
 		default:
 			b, _ := json.MarshalIndent(resp.Final, "", "  ")
-			fmt.Println(string(b))
+			var textResp struct{ Text string `json:"_text"` }
+			if json.Unmarshal(b, &textResp) == nil && textResp.Text != "" {
+				fmt.Println(textResp.Text)
+			} else {
+				fmt.Println(string(b))
+			}
 		}
 	}
 }
@@ -178,7 +184,7 @@ func sendRequest(serverURL, token, device, cmdType string, payload any, stream b
 	if err != nil {
 		return nil, fmt.Errorf("connect: %w", err)
 	}
-	defer c.Close(websocket.StatusNormalClosure, "")
+	defer func() { _ = c.Close(websocket.StatusNormalClosure, "") }()
 
 	c.SetReadLimit(64 << 20)
 
@@ -244,6 +250,8 @@ func sendRequest(serverURL, token, device, cmdType string, payload any, stream b
 		msgType = proto.TypeDrag
 	case "board":
 		msgType = proto.TypeBoard
+	case "monitors":
+		msgType = proto.TypeMonitors
 	case "devices":
 		msgType = proto.TypeDevices
 	default:
@@ -268,7 +276,7 @@ func sendRequest(serverURL, token, device, cmdType string, payload any, stream b
 			switch f.Type {
 			case proto.TypeStream:
 				var sc proto.StreamChunk
-				json.Unmarshal(f.Payload, &sc)
+				_ = json.Unmarshal(f.Payload, &sc)
 				resp.Stream = append(resp.Stream, sc.Data)
 			case proto.TypeResponse, proto.TypeError:
 				resp.Final = json.RawMessage(f.Payload)
@@ -287,7 +295,7 @@ func sendRequest(serverURL, token, device, cmdType string, payload any, stream b
 	}
 	if f.Type == proto.TypeError {
 		var ep proto.ErrorPayload
-		json.Unmarshal(f.Payload, &ep)
+		_ = json.Unmarshal(f.Payload, &ep)
 		return nil, fmt.Errorf("agent error: %s: %s", ep.Code, ep.Message)
 	}
 	resp.Final = json.RawMessage(f.Payload)
@@ -319,6 +327,8 @@ func buildPayload(cmd string, args []string) (any, error) {
 	case "windows":
 		return struct{}{}, nil
 	case "a11y":
+		return buildA11yPayload(args)
+	case "monitors":
 		return struct{}{}, nil
 	case "drag":
 		return buildDragPayload(args)
@@ -592,6 +602,49 @@ func buildDragPayload(args []string) (any, error) {
 	return req, nil
 }
 
+func buildA11yPayload(args []string) (any, error) {
+	defaultMon := 0
+	req := &proto.A11yRequest{Monitor: &defaultMon}
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--all":
+			req.Monitor = nil
+		case "--id":
+			if i+1 >= len(args) {
+				return nil, fmt.Errorf("--id requires a number")
+			}
+			n, _ := strconv.Atoi(args[i+1])
+			req.ID = &n
+			i++
+		case "--depth":
+			if i+1 >= len(args) {
+				return nil, fmt.Errorf("--depth requires a number")
+			}
+			n, _ := strconv.Atoi(args[i+1])
+			req.Depth = n
+			i++
+		case "--show-all":
+			req.ShowAll = true
+		case "--role":
+			if i+1 >= len(args) {
+				return nil, fmt.Errorf("--role requires a role name")
+			}
+			req.Roles = strings.Split(args[i+1], ",")
+			i++
+		case "--monitor":
+			if i+1 >= len(args) {
+				return nil, fmt.Errorf("--monitor requires a number")
+			}
+			n, _ := strconv.Atoi(args[i+1])
+			req.Monitor = &n
+			i++
+		default:
+			return nil, fmt.Errorf("unknown flag: %s", args[i])
+		}
+	}
+	return req, nil
+}
+
 func buildBoardPayload(args []string) (any, error) {
 	if len(args) == 0 || args[0] == "" {
 		return nil, fmt.Errorf("usage: rsk board \"<text>\"")
@@ -663,12 +716,12 @@ func saveTemp(prefix string, data []byte) string {
 		os.Exit(1)
 	}
 	if _, err := f.Write(data); err != nil {
-		f.Close()
-		os.Remove(f.Name())
+		_ = f.Close()
+		_ = os.Remove(f.Name())
 		fmt.Fprintf(os.Stderr, "error writing temp file: %v\n", err)
 		os.Exit(1)
 	}
-	f.Close()
+	_ = f.Close()
 	return f.Name()
 }
 
@@ -747,7 +800,9 @@ func printUsage(_ string) {
 	fmt.Fprintf(os.Stderr, "  drag <x1> <y1> <x2> <y2>  Mouse drag\n")
 	fmt.Fprintf(os.Stderr, "  board \"<text>\"          Clipboard write + paste\n")
 	fmt.Fprintf(os.Stderr, "  windows                 List windows\n")
-	fmt.Fprintf(os.Stderr, "  a11y                    Accessibility tree\n")
+	fmt.Fprintf(os.Stderr, "  a11y [--id N] [--depth N] [--role name] [--show-all] [--monitor N] [--all]\n")
+	fmt.Fprintf(os.Stderr, "                        Accessibility tree in Toon CSV (--monitor: filter by monitor, --all: all monitors)\n")
+	fmt.Fprintf(os.Stderr, "  monitors                List monitors\n")
 	fmt.Fprintf(os.Stderr, "  wait <sec>              Sleep N seconds\n")
 	fmt.Fprintf(os.Stderr, "  env                     Show env vars\n")
 	fmt.Fprintf(os.Stderr, "  clip get|set            Clipboard operations\n")

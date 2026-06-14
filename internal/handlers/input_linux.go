@@ -40,12 +40,6 @@ const (
 	relWheel = 0x08
 )
 
-// absolute axes
-const (
-	absX = 0x00
-	absY = 0x01
-)
-
 // mouse buttons
 const (
 	btnLeft   = 0x110
@@ -243,20 +237,6 @@ func (d *uinputDevice) sendEvent(evType, code uint16, value int32) error {
 
 func (d *uinputDevice) sync() error {
 	return d.sendEvent(evSyn, synReport, 0)
-}
-
-func (d *uinputDevice) keyDown(code uint16) error {
-	if err := d.sendEvent(evKey, code, 1); err != nil {
-		return err
-	}
-	return d.sync()
-}
-
-func (d *uinputDevice) keyUp(code uint16) error {
-	if err := d.sendEvent(evKey, code, 0); err != nil {
-		return err
-	}
-	return d.sync()
 }
 
 var kbdKeys []uint16

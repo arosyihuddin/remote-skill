@@ -41,6 +41,7 @@ const (
 	TypeDevices          MessageType = "devices"      // CLI internal: list connected devices
 	TypeDrag             MessageType = "drag"         // mouse drag
 	TypeBoard            MessageType = "board"        // clipboard write + paste
+	TypeMonitors         MessageType = "monitors"     // monitor layout
 
 	// Responses (agent -> server)
 	TypeResponse MessageType = "response"
@@ -225,6 +226,35 @@ type DragRequest struct {
 // BoardRequest writes text to clipboard then pastes it.
 type BoardRequest struct {
 	Text string `json:"text"`
+}
+
+// A11yRequest requests an accessibility tree.
+type A11yRequest struct {
+	ID      *int     `json:"id,omitempty"`
+	Depth   int      `json:"depth,omitempty"`
+	ShowAll bool     `json:"show_all,omitempty"`
+	Roles   []string `json:"roles,omitempty"`
+	Monitor *int     `json:"monitor,omitempty"`
+}
+
+// A11yTextResponse is the text-format response for a11y.
+type A11yTextResponse struct {
+	Text string `json:"_text"`
+}
+
+// MonitorsRequest requests monitor layout info.
+type MonitorsRequest struct{}
+
+// MonitorInfo describes a single monitor.
+type MonitorInfo struct {
+	ID      int     `json:"id"`
+	Name    string  `json:"name"`
+	X       int     `json:"x"`
+	Y       int     `json:"y"`
+	Width   int     `json:"w"`
+	Height  int     `json:"h"`
+	Scale   float64 `json:"scale,omitempty"`
+	Focused bool    `json:"focused,omitempty"`
 }
 
 // EmptyResult is used for actions with no return data beyond ok.

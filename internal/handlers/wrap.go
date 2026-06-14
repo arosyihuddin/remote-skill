@@ -198,4 +198,5 @@ func (d *Deps) WrapDrag() handler.Handler             { return d.wrapGUI("drag",
 func (d *Deps) WrapBoard() handler.Handler            { return d.wrapGUI("board", Board) }
 func (d *Deps) WrapWindows() handler.Handler          { return d.wrapGUI("windows", Windows) }
 func (d *Deps) WrapAccessibilityTree() handler.Handler { return d.wrapGUI("accessibility_tree", AccessibilityTree) }
+func (d *Deps) WrapMonitors() handler.Handler           { return d.wrapGUI("monitors", Monitors) }
 

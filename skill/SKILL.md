@@ -73,9 +73,159 @@ rsk scroll --dy 5         # scroll up 5
 rsk clip get
 rsk clip set "text to copy"
 
+# Drag
+rsk drag 100 100 300 300 [--button left|right|middle]
+
+# Board (clipboard write + paste)
+rsk board "Hello World"
+
 # List connected devices
 rsk devices
+
+# Windows
+rsk windows
+
+# Accessibility tree
+rsk a11y
+rsk a11y --id 106
+rsk a11y --role button
+rsk a11y --role button,input
+rsk a11y --depth 12
+rsk a11y --show-all
+rsk a11y --all
+rsk a11y --monitor 1
+rsk a11y --monitor -1
 ```
+
+## Accessibility (a11y)
+
+Accessibility tree via AT-SPI2 — lihat semua UI element di layar dalam format **Toon CSV**.
+
+### Default output — Toon flat list
+
+```bash
+rsk a11y
+```
+
+Output:
+```
+nodes[450]{id,role,name,x,y,w,h,parent,mon}:
+  1,desktop frame,main,0,0,1024,768,0,-1
+  27,window,ghostty,0,0,948,1023,6,1
+  47,application,waybar,0,0,0,0,1,-1
+  55,label,YouTube - LibreWolf,0,0,212,40,54,0
+  79,button,11 ,680,8,47,24,78,0
+  106,label,󰤨   1.2kB/s  824.0B/s,1423,0,204,40,105,0
+```
+
+**Format:**
+| Field | Arti |
+|-------|------|
+| `id` | ID unik sequential |
+| `role` | Tipe element AT-SPI2 |
+| `name` | Nama/konten (icon, label, atau teks) |
+| `x,y` | Posisi kiri-atas dalam pixel |
+| `w,h` | Lebar dan tinggi |
+| `parent` | ID induk di tree (0 = root) |
+| `mon` | Monitor index (0=eDP-1, 1=HDMI-A-1, -1=background) |
+
+### Role umum
+
+| Role | Arti | Interactive |
+|------|------|-------------|
+| `push button` | Tombol yang bisa diklik | ✅ |
+| `toggle button` | Tombol on/off | ✅ |
+| `entry` | Input teks | ✅ |
+| `password text` | Input password | ✅ |
+| `combo box` | Dropdown | ✅ |
+| `check box` | Checkbox | ✅ |
+| `page tab` | Tab di browser | ✅ |
+| `link` | Hyperlink | ✅ |
+| `menu item` | Item di menu | ✅ |
+| `slider` | Slider | ✅ |
+| `spin button` | Up/down spinner | ✅ |
+| `label` | Teks statis | ❌ |
+| `window` | Window | ❌ |
+| `application` | Aplikasi (bounds 0,0,0,0) | ❌ |
+| `filler` | Container layout, ignore | ❌ |
+
+### Detail node dengan character bounds
+
+```bash
+rsk a11y --id 106
+```
+
+Output:
+```
+label "󰤨  1.2kB/s" [1423,0,204,40]
+  chars: 1441,11,8,17;1449,11,8,17;1457,11,8,17;...
+```
+
+Char bounds = `x,y,w,h` per karakter. Berguna untuk klik element yang mengandung icon (Nerd Font). Karakter pertama (`[0]`) biasanya adalah icon — klik di tengahnya:
+
+```
+click_x = char.x + char.w / 2
+click_y = char.y + char.h / 2
+```
+
+### Filter role
+
+```bash
+rsk a11y --role button                    # cuma push/toggle button
+rsk a11y --role button,input              # multiple role
+rsk a11y --role button --id 23            # detail node yang cocok filter
+```
+
+Alias role: `button` → push button/toggle button, `input` → entry/password text, `checkbox` → check box, `dropdown` → combo box.
+
+### Flags
+
+| Flag | Fungsi |
+|------|--------|
+| *(none)* | Monitor 0 saja (default) |
+| `--all` | Semua monitor |
+| `--monitor N` | Filter spesifik monitor (0, 1, -1) |
+| `--id N` | Detail node + char bounds per karakter |
+| `--depth N` | Tree depth (default 8, maks 20) |
+| `--role name` | Filter role (button, input, checkbox, dropdown) |
+| `--show-all` | Tampilkan semua node termasuk yg tidak berguna |
+
+### AI Agent usage pattern
+
+```bash
+# 1. Cari monitor target
+rsk monitors
+
+# 2. Ambil tree di monitor itu
+rsk a11y                        # default monitor 0
+rsk a11y --monitor 1            # monitor khusus
+rsk a11y --all                  # semua monitor
+
+# 3. Cari target — filter role yg interactive
+rsk a11y --role button
+rsk a11y --role button,input
+
+# 4. Detail node untuk posisi presisi (apalagi ada icon)
+rsk a11y --id 23
+
+# 5. Klik di koordinat
+rsk mouse <x + w/2> <y + h/2>
+rsk click
+
+# 6. Type di entry
+rsk type "teks"
+
+# 7. Verifikasi perubahan
+rsk a11y
+```
+
+### Known limitations
+
+- Monitor assignment via height heuristic + IoU dengan `hyprctl clients`. Waybar child elements tetap `mon=-1` (panel bukan client).
+- Waybar element terekspos sebagai `label`, bukan `push button` — tapi koordinatnya tetap akurat untuk klik.
+- Window/LibreWolf element role nya mungkin berbeda dari GTK native.
+- Element dengan bounds `-1,-1,-1,-1` atau `0,0,0,0` — tidak punya posisi layar (menu belum terbuka, atau background app).
+- Default depth 8; depth lebih tinggi = lebih banyak node tapi lebih lambat (banyak DBus calls).
 
 ## Management
 
