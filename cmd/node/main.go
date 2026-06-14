@@ -31,6 +31,9 @@ const udevRule = `KERNEL=="uinput", MODE="0666"`
 func main() {
 	if len(os.Args) >= 2 {
 		switch os.Args[1] {
+		case "daemon":
+			runDaemon(os.Args[2:])
+			return
 		case "setup":
 			runSetup(os.Args[2:])
 			return
@@ -43,16 +46,22 @@ func main() {
 		case "update":
 			runUpdate()
 			return
+		case "start":
+			exec.Command("systemctl", "--user", "start", "rsk-node").Run()
+			return
+		case "stop":
+			exec.Command("systemctl", "--user", "stop", "rsk-node").Run()
+			return
+		case "restart":
+			runRestart()
+			return
 		case "status":
 			runStatus()
 			return
 		case "info":
 			runInfo()
 			return
-		case "restart":
-			runRestart()
-			return
-		case "log":
+		case "logs":
 			runLog(os.Args[2:])
 			return
 		case "-h", "--help", "help":
@@ -60,7 +69,11 @@ func main() {
 			return
 		}
 	}
+	printUsage()
+	os.Exit(2)
+}
 
+func runDaemon(args []string) {
 	cfgPath := flag.String("config", defaultConfigPath(), "path to config file")
 	flag.Parse()
 
@@ -311,19 +324,25 @@ func runUninstall() {
 	os.Remove(filepath.Join(os.Getenv("HOME"), ".local", "bin", "rsk-node"))
 	fmt.Println("  ✔ binary removed")
 
+	configPath := filepath.Join(os.Getenv("HOME"), ".config", "rsk", "node.env")
+	os.Remove(configPath)
+	fmt.Println("  ✔ config removed")
+
 	fmt.Println("\n✅ rsk-node uninstalled")
 }
 
 func setupUdev() error {
 	rulePath := "/etc/udev/rules.d/99-rsk-uinput.rules"
-	if _, err := os.Stat(rulePath); err == nil {
-		return nil // already exists
+	if _, err := os.Stat(rulePath); os.IsNotExist(err) {
+		cmd := exec.Command("sudo", "sh", "-c",
+			fmt.Sprintf("echo '%s' > %s && udevadm control --reload-rules && udevadm trigger", udevRule, rulePath))
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("sudo udev setup failed: %w\n%s", err, out)
+		}
 	}
-	cmd := exec.Command("sudo", "sh", "-c",
-		fmt.Sprintf("echo '%s' > %s && udevadm control --reload-rules && udevadm trigger && chmod 0666 /dev/uinput", udevRule, rulePath))
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("sudo udev setup failed: %w\n%s", err, out)
+	if out, err := exec.Command("sudo", "chmod", "0666", "/dev/uinput").CombinedOutput(); err != nil {
+		return fmt.Errorf("sudo chmod /dev/uinput: %w\n%s", err, out)
 	}
 	return nil
 }
@@ -450,19 +469,21 @@ func runUpdate() {
 func printUsage() {
 	fmt.Fprintf(os.Stderr, "Usage: rsk-node <command> [args...]\n\n")
 	fmt.Fprintf(os.Stderr, "Commands:\n")
+	fmt.Fprintf(os.Stderr, "  daemon          Start the node daemon\n")
 	fmt.Fprintf(os.Stderr, "  setup           Install and configure as systemd user service\n")
 	fmt.Fprintf(os.Stderr, "  uninstall       Remove installation\n")
 	fmt.Fprintf(os.Stderr, "  version         Print version\n")
 	fmt.Fprintf(os.Stderr, "  update          Self-update from GitHub\n")
+	fmt.Fprintf(os.Stderr, "  start           Start systemd service\n")
+	fmt.Fprintf(os.Stderr, "  stop            Stop systemd service\n")
+	fmt.Fprintf(os.Stderr, "  restart         Restart systemd service\n")
 	fmt.Fprintf(os.Stderr, "  status          Show service status\n")
 	fmt.Fprintf(os.Stderr, "  info            Show config summary\n")
-	fmt.Fprintf(os.Stderr, "  restart         Restart service\n")
-	fmt.Fprintf(os.Stderr, "  log [args]      Tail journal logs\n")
+	fmt.Fprintf(os.Stderr, "  logs [args]      Tail journal logs\n")
 	fmt.Fprintf(os.Stderr, "\nFlags for setup:\n")
 	fmt.Fprintf(os.Stderr, "  --server URL     Broker WS address\n")
 	fmt.Fprintf(os.Stderr, "  --device NAME    Device identifier\n")
 	fmt.Fprintf(os.Stderr, "  --token SECRET   Auth token (default: dev)\n")
 	fmt.Fprintf(os.Stderr, "  --allow-gui      Enable GUI actions (default: true)\n")
 	fmt.Fprintf(os.Stderr, "  --uninstall       Remove installation\n")
-	fmt.Fprintf(os.Stderr, "\nWithout arguments, runs as daemon.\n")
 }

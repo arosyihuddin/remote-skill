@@ -5,7 +5,7 @@ Wants=graphical-session.target network-online.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/rsk-node
+ExecStart=%h/.local/bin/rsk-node daemon
 Restart=on-failure
 RestartSec=3
 

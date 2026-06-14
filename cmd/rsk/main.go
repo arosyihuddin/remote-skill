@@ -58,16 +58,22 @@ func main() {
 		case "update":
 			runUpdate()
 			return
+		case "start":
+			exec.Command("systemctl", "--user", "start", "rsk").Run()
+			return
+		case "stop":
+			exec.Command("systemctl", "--user", "stop", "rsk").Run()
+			return
+		case "restart":
+			runRestart()
+			return
 		case "status":
 			runStatus()
 			return
 		case "info":
 			runInfo()
 			return
-		case "restart":
-			runRestart()
-			return
-		case "log":
+		case "logs":
 			runLog(os.Args[2:])
 			return
 		case "-h", "--help", "help":
@@ -196,6 +202,11 @@ func runUninstall() {
 
 	os.Remove(filepath.Join(os.Getenv("HOME"), ".local", "bin", "rsk"))
 	fmt.Println("  ✔ binary removed")
+
+	configPath := filepath.Join(os.Getenv("HOME"), ".config", "rsk", "rsk.env")
+	os.Remove(configPath)
+	fmt.Println("  ✔ config removed")
+
 	fmt.Println("\n✅ rsk uninstalled")
 }
 
@@ -339,10 +350,12 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  uninstall           Remove installation\n")
 	fmt.Fprintf(os.Stderr, "  version             Print version\n")
 	fmt.Fprintf(os.Stderr, "  update              Self-update from GitHub\n")
+	fmt.Fprintf(os.Stderr, "  start               Start systemd service\n")
+	fmt.Fprintf(os.Stderr, "  stop                Stop systemd service\n")
+	fmt.Fprintf(os.Stderr, "  restart             Restart systemd service\n")
 	fmt.Fprintf(os.Stderr, "  status              Show service status\n")
 	fmt.Fprintf(os.Stderr, "  info                Show config summary\n")
-	fmt.Fprintf(os.Stderr, "  restart             Restart service\n")
-	fmt.Fprintf(os.Stderr, "  log [args]          Tail journal logs\n")
+	fmt.Fprintf(os.Stderr, "  logs [args]         Tail journal logs\n")
 	fmt.Fprintf(os.Stderr, "  token               Print auth token\n")
 	fmt.Fprintf(os.Stderr, "  devices             List connected devices\n")
 	fmt.Fprintf(os.Stderr, "  exec \"<cmd>\"        Run a command on remote node\n")
