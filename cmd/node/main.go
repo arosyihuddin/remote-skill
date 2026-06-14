@@ -28,6 +28,28 @@ var serviceUnit []byte
 
 const udevRule = `KERNEL=="uinput", MODE="0666"`
 
+type dep struct {
+	Name        string
+	Pkg         string
+	Desc        string
+	AutoInstall bool
+}
+
+var depsByEnv = map[string][]dep{
+	"x11": {
+		{Name: "wmctrl", Pkg: "wmctrl", Desc: "window list & management", AutoInstall: true},
+	},
+	"hyprland": {
+		{Name: "hyprctl", Pkg: "", Desc: "window list (comes with Hyprland)", AutoInstall: false},
+		{Name: "grim", Pkg: "grim", Desc: "screenshot capture", AutoInstall: false},
+		{Name: "wlr-randr", Pkg: "wlr-randr", Desc: "display monitor info", AutoInstall: false},
+	},
+	"wayland": {
+		{Name: "grim", Pkg: "grim", Desc: "screenshot capture", AutoInstall: false},
+		{Name: "wlr-randr", Pkg: "wlr-randr", Desc: "display monitor info", AutoInstall: false},
+	},
+}
+
 func main() {
 	if len(os.Args) >= 2 {
 		switch os.Args[1] {
@@ -188,6 +210,47 @@ func runSetup(args []string) {
 		fmt.Println("  ✔ /dev/uinput accessible")
 	}
 
+	// 1.5 Dependencies
+	env := detectDesktop()
+	fmt.Printf("==> checking dependencies... [%s]\n", env)
+	pm := detectPM()
+	missing := checkDeps(env)
+	var autoPkgs []string
+	var warnMissing []dep
+	for _, d := range missing {
+		if d.AutoInstall {
+			autoPkgs = append(autoPkgs, d.Pkg)
+		} else {
+			warnMissing = append(warnMissing, d)
+		}
+	}
+	if len(autoPkgs) > 0 {
+		fmt.Printf("  ℹ missing: %s\n", strings.Join(autoPkgs, ", "))
+		fmt.Print("  Install automatically? [Y/n]: ")
+		var yn string
+		fmt.Scanln(&yn)
+		if yn != "n" && yn != "N" {
+			if err := installPkgs(pm, autoPkgs); err != nil {
+				fmt.Fprintf(os.Stderr, "  warning: auto-install failed: %v (install manually later)\n", err)
+			} else {
+				fmt.Println("  ✔ dependencies installed")
+			}
+		} else {
+			for _, d := range missing {
+				if d.AutoInstall {
+					warnMissing = append(warnMissing, d)
+				}
+			}
+		}
+	}
+	for _, d := range warnMissing {
+		if d.Pkg != "" {
+			fmt.Printf("  ⚠ %s not found (%s) — install: sudo %s install -y %s\n", d.Name, d.Desc, pm, d.Pkg)
+		} else {
+			fmt.Printf("  ⚠ %s not found (%s) — install manually\n", d.Name, d.Desc)
+		}
+	}
+
 	// 2. Config
 	prompt := func(label, def string) string {
 		fmt.Printf("  %s [%s]: ", label, def)
@@ -345,6 +408,69 @@ func setupUdev() error {
 		return fmt.Errorf("sudo chmod /dev/uinput: %w\n%s", err, out)
 	}
 	return nil
+}
+
+func detectDesktop() string {
+	if os.Getenv("HYPRLAND_INSTANCE_SIGNATURE") != "" {
+		return "hyprland"
+	}
+	switch os.Getenv("XDG_SESSION_TYPE") {
+	case "wayland":
+		return "wayland"
+	case "x11":
+		return "x11"
+	}
+	if _, err := exec.LookPath("hyprctl"); err == nil {
+		return "hyprland"
+	}
+	if _, err := exec.LookPath("wmctrl"); err == nil {
+		return "x11"
+	}
+	return "x11"
+}
+
+func detectPM() string {
+	for _, pm := range []string{"apt", "dnf", "pacman", "zypper", "apk"} {
+		if _, err := exec.LookPath(pm); err == nil {
+			return pm
+		}
+	}
+	return "apt"
+}
+
+func checkDeps(env string) []dep {
+	var missing []dep
+	for _, d := range depsByEnv[env] {
+		if _, err := exec.LookPath(d.Name); err != nil {
+			missing = append(missing, d)
+		}
+	}
+	return missing
+}
+
+func installPkgs(pm string, pkgs []string) error {
+	if len(pkgs) == 0 {
+		return nil
+	}
+	if _, err := exec.LookPath("sudo"); err != nil {
+		return fmt.Errorf("sudo not found, install manually")
+	}
+	args := []string{}
+	switch pm {
+	case "apt":
+		args = []string{"install", "-y"}
+	case "dnf", "zypper":
+		args = []string{"install", "-y"}
+	case "pacman":
+		args = []string{"-S", "--noconfirm"}
+	case "apk":
+		args = []string{"add"}
+	}
+	args = append(args, pkgs...)
+	cmd := exec.Command("sudo", append([]string{pm}, args...)...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func defaultConfigPath() string {
