@@ -1,6 +1,44 @@
-# remote-skill
+# remote-skill 🔌
 
-Bridge agar AI agent (atau CLI) bisa kontrol laptop/workstation secara realtime via WebSocket.
+[![Linux](https://img.shields.io/badge/platform-linux-blue)]()
+
+> Bridge for AI agents (or CLI) to control a Linux workstation in real-time over WebSocket.
+
+---
+
+## Quick Start ⚡
+
+```bash
+# server (VPS)
+wget https://github.com/arosyihuddin/remote-skill/releases/latest/download/rsk-linux-amd64 -O rsk
+chmod +x rsk
+./rsk setup
+
+# node (laptop)
+wget https://github.com/arosyihuddin/remote-skill/releases/latest/download/rsk-node-linux-amd64 -O rsk-node
+chmod +x rsk-node
+./rsk-node setup --server ws://vps:7777/agent
+```
+
+Done. Service runs automatically — `systemctl --user rsk` / `rsk-node`.
+
+---
+
+## Features
+
+| Category | Commands |
+|---|---|
+| **Shell** | `exec`, `read`, `write`, `ls` |
+| **GUI** | `screenshot`, `click`, `type`, `key`, `mouse`, `scroll`, `drag` |
+| **Clipboard** | `clip get`, `clip set`, `board` (write + paste) |
+| **System** | `windows` (list windows), `a11y` (accessibility tree) |
+| **Device** | `devices` (list connected), multi-device via ID prefix |
+| **Service** | `setup`, `uninstall`, `version`, `status`, `info`, `restart`, `log` |
+| **Update** | `update` (self-update from GitHub), `env`, `wait` |
+
+---
+
+## Architecture
 
 ```
 ┌──────────────────────────┐         ┌──────────────────────────┐
@@ -17,63 +55,22 @@ Bridge agar AI agent (atau CLI) bisa kontrol laptop/workstation secara realtime 
 └──────────────────────────┘
 ```
 
-## Komponen
+**Components:**
 
-- `cmd/rsk` -> binary `rsk` (dual mode). Broker WS di `:7777` + monitoring HTTP di `:7800` + CLI mode.
-- `cmd/node` -> binary `rsk-node` di laptop. Dial-out ke broker, eksekusi request.
-- `internal/cli` -> CLI mode (connect WS, kirim request, print response).
-- `internal/proto` -> wire format JSON.
-- `internal/broker` -> device registry + request routing.
-- `internal/handlers` -> exec / file / GUI implementation (Linux/Wayland).
-- Systemd units di-embed dalam binary (`//go:embed`).
+| Component | Role |
+|---|---|
+| `cmd/rsk` | Broker daemon (`:7777` WS + `:7800` HTTP monitor) + CLI mode |
+| `cmd/node` | Client daemon on laptop — dials out to broker, executes requests |
+| `internal/cli` | WS-based CLI — connect, send request, print response |
+| `internal/broker` | Device registry + request routing |
+| `internal/handlers` | exec / file / GUI handlers (Linux/Wayland) |
+| `internal/proto` | JSON wire protocol |
 
-## Build
+---
 
-```bash
-./build.sh
-# atau manual:
-CGO_ENABLED=0 go build -o bin/rsk ./cmd/rsk
-CGO_ENABLED=0 go build -o bin/rsk-node ./cmd/node
-```
+## Usage
 
-Cross-compile dari laptop ke VPS (linux/amd64):
-
-```bash
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/rsk-linux-amd64 ./cmd/rsk
-```
-
-## Setup daemon
-
-```bash
-# Install sebagai user service (auto-detect config path)
-./bin/rsk setup
-
-# Atau kustom:
-# ./bin/rsk setup --agent 0.0.0.0:7777 --monitor 127.0.0.1:7800 --token mytoken
-```
-
-Config tersimpan di `~/.config/rsk/rsk.env`. Service: `systemctl --user rsk`.
-
-`AGENT_LISTEN` sebaiknya bind ke IP mesh VPN (`100.116.138.90:7777`), jangan `0.0.0.0` kecuali fronted dengan TLS+auth.
-
-## Setup node
-
-```bash
-# Install sebagai user service (auto-read token dari daemon config)
-./bin/rsk-node setup
-
-# Atau kustom:
-# ./bin/rsk-node setup --server ws://vps:7777/agent --device my-laptop --token secret123
-```
-
-`rsk-node setup` otomatis:
-- Drop udev rule + `chmod 0666 /dev/uinput` (akses keyboard/mouse langsung)
-- Auto-read token dari `~/.config/rsk/rsk.env` (kalau satu mesin)
-- Buat config `~/.config/rsk/node.env`
-- Copas binary ke `~/.local/bin/rsk-node`
-- Install + enable systemd user service
-
-## CLI Usage
+### CLI
 
 ```bash
 # Single device — auto-detect
@@ -82,35 +79,109 @@ rsk screenshot
 
 # Multi-device — specify device-id
 rsk my-laptop exec "echo hi"
-rsk my-laptop screenshot
 
-# Or via env var
+# Or via env
 export RSK_DEVICE=my-laptop
 rsk exec "ls -la"
 ```
 
-## Multi-device
+### Service management
 
-`DEVICE_ID` di config tiap laptop harus unik (misal `laptop-pstar7`, `desktop-home`, `macbook-work`). CLI bisa specify device-id sebagai argumen pertama. Jika cuma 1 device terkoneksi, otomatis.
+```bash
+rsk status              # service status + config
+rsk info                # config summary (token masked)
+rsk restart             # restart service
+rsk log                 # tail 50 journal entries
+rsk log -f              # follow logs
+```
 
-## Smoke test (lokal, tanpa VPS)
+### Self-update
+
+```bash
+rsk update              # update daemon from GitHub release
+rsk-node update         # update node
+```
+
+Binary is atomically replaced and service restarted automatically.
+
+---
+
+## Setup guides
+
+### Daemon
+
+```bash
+rsk setup
+# or:  rsk setup --agent 0.0.0.0:7777 --monitor 127.0.0.1:7800 --token mytoken
+```
+
+Config: `~/.config/rsk/rsk.env`. Service: `systemctl --user rsk`.
+
+### Node
+
+```bash
+rsk-node setup --server ws://vps:7777/agent
+# or:  rsk-node setup --server ws://vps:7777/agent --device my-laptop --token secret123
+```
+
+Auto-configures:
+- `/dev/uinput` udev rule (keyboard/mouse)
+- Token auto-read from daemon config (same machine)
+- Config `~/.config/rsk/node.env`
+- Binary copy to `~/.local/bin/rsk-node`
+- systemd user service install + enable
+
+---
+
+## Development
+
+```bash
+git clone https://github.com/arosyihuddin/remote-skill.git
+cd remote-skill
+./build.sh
+
+# Setup from local build
+./bin/rsk setup
+./bin/rsk-node setup
+```
+
+Build release binaries (cross-compiled for `linux/amd64`):
+
+```bash
+./build.sh release
+# output: bin/rsk-linux-amd64 + bin/rsk-node-linux-amd64
+```
+
+### Smoke test (local, no VPS)
 
 ```bash
 # terminal 1 — broker
-RSK_TOKEN=test123 ./bin/rsk daemon
+RSK_TOKEN=test123 rsk daemon
 
 # terminal 2 — node
-RSK_TOKEN=test123 ./bin/rsk-node
+RSK_TOKEN=test123 rsk-node
 
 # terminal 3 — CLI
-./bin/rsk exec "echo hi"
+rsk exec "echo hi"
 ```
 
-## Security model
+---
 
-- Single shared `TOKEN` between daemon and all nodes.
-- Monitoring HTTP (`:7800`) sebaiknya bind ke `127.0.0.1` (hanya akses lokal) — ganti ke `0.0.0.0` hanya jika perlu akses dari browser remote.
-- WS broker (`:7777`) sebaiknya bind ke mesh VPN IP saja (`100.116.138.90:7777`).
-- CLI dan Node konek via WS — siapa pun yang punya token bisa akses laptop. Treat `TOKEN` sebagai root credential.
+## Multi-device
 
+Each device needs a unique `DEVICE_ID` in its config (e.g. `laptop-pstar7`, `desktop-home`). CLI can specify the target as the first argument. Auto-selected if only one device is connected.
 
+---
+
+## Security
+
+- Single shared `TOKEN` authenticates both nodes and CLI clients.
+- Monitoring HTTP (`:7800`) should bind to `127.0.0.1` — change to `0.0.0.0` only if remote browser access is needed with auth.
+- WS broker (`:7777`) should bind to mesh VPN IP only (e.g. `100.116.138.90:7777`).
+- Anyone with the token can execute commands. Treat `TOKEN` as a root credential.
+
+---
+
+## License
+
+MIT
