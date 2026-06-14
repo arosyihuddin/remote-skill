@@ -1,0 +1,7 @@
+{
+  "name": "RSK Windows",
+  "description": "Window list for Remote Skill agent",
+  "uuid": "rsk-windows@arosyihuddin.github.com",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "url": "https://github.com/arosyihuddin/remote-skill"
+}

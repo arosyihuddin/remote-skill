@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	_ "embed"
+	"embed"
 	"flag"
 	"fmt"
 	"log"
@@ -26,6 +26,9 @@ import (
 //go:embed rsk-node.service
 var serviceUnit []byte
 
+//go:embed gnome-ext/*
+var gnomeExt embed.FS
+
 const udevRule = `KERNEL=="uinput", MODE="0666"`
 
 type dep struct {
@@ -47,6 +50,11 @@ var depsByEnv = map[string][]dep{
 	"wayland": {
 		{Name: "grim", Pkg: "grim", Desc: "screenshot capture", AutoInstall: true},
 		{Name: "wlr-randr", Pkg: "wlr-randr", Desc: "display monitor info", AutoInstall: true},
+	},
+	"gnome": {
+		{Name: "grim", Pkg: "grim", Desc: "screenshot capture", AutoInstall: true},
+		{Name: "wlr-randr", Pkg: "wlr-randr", Desc: "display monitor info", AutoInstall: true},
+		{Name: "wmctrl", Pkg: "wmctrl", Desc: "window list (XWayland fallback)", AutoInstall: true},
 	},
 }
 
@@ -251,6 +259,25 @@ func runSetup(args []string) {
 		}
 	}
 
+	// 1.6 GNOME Shell extension
+	if env == "gnome" {
+		fmt.Println("==> installing GNOME Shell extension...")
+		extDir := filepath.Join(os.Getenv("HOME"), ".local", "share", "gnome-shell", "extensions", "rsk-windows@arosyihuddin.github.com")
+		os.MkdirAll(extDir, 0755)
+
+		extJS, err := gnomeExt.ReadFile("gnome-ext/extension.js")
+		if err == nil {
+			os.WriteFile(filepath.Join(extDir, "extension.js"), extJS, 0644)
+		}
+		meta, err := gnomeExt.ReadFile("gnome-ext/metadata.json")
+		if err == nil {
+			os.WriteFile(filepath.Join(extDir, "metadata.json"), meta, 0644)
+		}
+		exec.Command("gnome-extensions", "enable", "rsk-windows@arosyihuddin.github.com").Run()
+		fmt.Println("  ✔ extension installed")
+		fmt.Println("  ℹ restart GNOME Shell (Alt+F2, r) or logout/login to activate")
+	}
+
 	// 2. Config
 	prompt := func(label, def string) string {
 		fmt.Printf("  %s [%s]: ", label, def)
@@ -384,6 +411,14 @@ func runUninstall() {
 		}
 	}
 
+	// Remove GNOME Shell extension
+	extDir := filepath.Join(os.Getenv("HOME"), ".local", "share", "gnome-shell", "extensions", "rsk-windows@arosyihuddin.github.com")
+	if _, err := os.Stat(extDir); err == nil {
+		exec.Command("gnome-extensions", "disable", "rsk-windows@arosyihuddin.github.com").Run()
+		os.RemoveAll(extDir)
+		fmt.Println("  ✔ GNOME extension removed")
+	}
+
 	os.Remove(filepath.Join(os.Getenv("HOME"), ".local", "bin", "rsk-node"))
 	fmt.Println("  ✔ binary removed")
 
@@ -410,23 +445,30 @@ func setupUdev() error {
 	return nil
 }
 
+func processRunning(name string) bool {
+	out, _ := exec.Command("pgrep", "-x", name).Output()
+	return len(out) > 0
+}
+
 func detectDesktop() string {
-	if os.Getenv("HYPRLAND_INSTANCE_SIGNATURE") != "" {
+	switch {
+	case processRunning("Hyprland"):
 		return "hyprland"
-	}
-	switch os.Getenv("XDG_SESSION_TYPE") {
-	case "wayland":
+	case processRunning("sway"), processRunning("river"), processRunning("wayfire"):
 		return "wayland"
-	case "x11":
+	case processRunning("gnome-shell"):
+		return "gnome"
+	case processRunning("mutter"), processRunning("kwin_wayland"):
+		return "wayland"
+	case processRunning("Xorg"), processRunning("X"):
+		return "x11"
+	case os.Getenv("WAYLAND_DISPLAY") != "":
+		return "wayland"
+	case os.Getenv("DISPLAY") != "":
+		return "x11"
+	default:
 		return "x11"
 	}
-	if _, err := exec.LookPath("hyprctl"); err == nil {
-		return "hyprland"
-	}
-	if _, err := exec.LookPath("wmctrl"); err == nil {
-		return "x11"
-	}
-	return "x11"
 }
 
 func detectPM() string {

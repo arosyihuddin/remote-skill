@@ -22,13 +22,13 @@ type WindowInfo struct {
 }
 
 type hyprctlWindow struct {
-	Class   string `json:"class"`
-	Title   string `json:"title"`
-	At      []int  `json:"at"`
-	Size    []int  `json:"size"`
-	Pid     int    `json:"pid"`
-	Mapped  bool   `json:"mapped"`
-	Hidden  bool   `json:"hidden"`
+	Class  string `json:"class"`
+	Title  string `json:"title"`
+	At     []int  `json:"at"`
+	Size   []int  `json:"size"`
+	Pid    int    `json:"pid"`
+	Mapped bool   `json:"mapped"`
+	Hidden bool   `json:"hidden"`
 }
 
 type hyprctlActive struct {
@@ -36,15 +36,74 @@ type hyprctlActive struct {
 	Title string `json:"title"`
 }
 
+type swayNode struct {
+	Name     string        `json:"name"`
+	Type     string        `json:"type"`
+	AppID    *string       `json:"app_id"`
+	PID      int           `json:"pid"`
+	Focused  bool          `json:"focused"`
+	Rect     swayRect      `json:"rect"`
+	Nodes    []swayNode    `json:"nodes"`
+	Floating []swayNode    `json:"floating_nodes"`
+	WinProps *swayWinProps `json:"window_properties"`
+}
+
+type swayRect struct {
+	X      int `json:"x"`
+	Y      int `json:"y"`
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
+type swayWinProps struct {
+	Class string `json:"class"`
+}
+
+type swayTree struct {
+	Nodes []swayNode `json:"nodes"`
+}
+
+type gnomeWindowRaw struct {
+	ID     int    `json:"id"`
+	Title  string `json:"title"`
+	WmClass string `json:"wm_class"`
+	PID    int    `json:"pid"`
+	X      int    `json:"x"`
+	Y      int    `json:"y"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+	Focused bool  `json:"focused"`
+}
+
 func Windows(ctx context.Context, _ json.RawMessage, _ handler.StreamWriter) (any, error) {
-	return windowsHyprctl(ctx)
+	wins, err := windowsHyprctl(ctx)
+	if err == nil {
+		return wins, nil
+	}
+
+	wins, err = windowsSway(ctx)
+	if err == nil {
+		return wins, nil
+	}
+
+	wins, err = windowsGNOME(ctx)
+	if err == nil {
+		return wins, nil
+	}
+
+	wins, err = windowsWMCTRL(ctx)
+	if err == nil {
+		return wins, nil
+	}
+
+	return nil, fmt.Errorf("windows: no compositor tool available (try installing hyprctl, swaymsg, or wmctrl)")
 }
 
 func windowsHyprctl(ctx context.Context) ([]WindowInfo, error) {
 	cmd := exec.CommandContext(ctx, "hyprctl", "clients", "-j")
 	out, err := cmd.Output()
 	if err != nil {
-		return windowsWMCTRL(ctx)
+		return nil, err
 	}
 	var all []hyprctlWindow
 	if err := json.Unmarshal(out, &all); err != nil {
@@ -83,6 +142,87 @@ func windowsHyprctl(ctx context.Context) ([]WindowInfo, error) {
 		})
 	}
 	return windows, nil
+}
+
+func windowsSway(ctx context.Context) ([]WindowInfo, error) {
+	cmd := exec.CommandContext(ctx, "swaymsg", "-t", "get_tree")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	var tree swayTree
+	if err := json.Unmarshal(out, &tree); err != nil {
+		return nil, fmt.Errorf("swaymsg parse: %w", err)
+	}
+	return swayCollect(tree.Nodes), nil
+}
+
+func swayCollect(nodes []swayNode) []WindowInfo {
+	var windows []WindowInfo
+	for _, n := range nodes {
+		if n.Type == "con" || n.Type == "floating_con" {
+			app := ""
+			if n.AppID != nil {
+				app = *n.AppID
+			} else if n.WinProps != nil {
+				app = n.WinProps.Class
+			}
+			if n.Name != "" {
+				windows = append(windows, WindowInfo{
+					App:    app,
+					Title:  n.Name,
+					X:      n.Rect.X,
+					Y:      n.Rect.Y,
+					Width:  n.Rect.Width,
+					Height: n.Rect.Height,
+					Pid:    n.PID,
+					Active: n.Focused,
+				})
+			}
+		}
+		windows = append(windows, swayCollect(n.Nodes)...)
+		windows = append(windows, swayCollect(n.Floating)...)
+	}
+	return windows
+}
+
+func windowsGNOME(ctx context.Context) ([]WindowInfo, error) {
+	cmd := exec.CommandContext(ctx, "gdbus", "call", "--session",
+		"--dest", "org.gnome.Shell",
+		"--object-path", "/org/gnome/Shell/Extensions/Windows",
+		"--method", "org.gnome.Shell.Extensions.Windows.List")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	return parseGNOMEJSON(out)
+}
+
+func parseGNOMEJSON(out []byte) ([]WindowInfo, error) {
+	s := string(out)
+	start := strings.IndexByte(s, '\'')
+	end := strings.LastIndexByte(s, '\'')
+	if start == -1 || end <= start {
+		return nil, fmt.Errorf("parse gnome list: unexpected gdbus output")
+	}
+	var raw []gnomeWindowRaw
+	if err := json.Unmarshal([]byte(s[start+1:end]), &raw); err != nil {
+		return nil, fmt.Errorf("parse gnome list: %w", err)
+	}
+	wins := make([]WindowInfo, len(raw))
+	for i, w := range raw {
+		wins[i] = WindowInfo{
+			App:    w.WmClass,
+			Title:  w.Title,
+			X:      w.X,
+			Y:      w.Y,
+			Width:  w.Width,
+			Height: w.Height,
+			Pid:    w.PID,
+			Active: w.Focused,
+		}
+	}
+	return wins, nil
 }
 
 func windowsWMCTRL(ctx context.Context) ([]WindowInfo, error) {
