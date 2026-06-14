@@ -47,17 +47,17 @@ rsk screenshot
 
 ## Features
 
-| Capability | Commands | What it does |
-|---|---|---|
-| **Shell execution** | `exec` | Run any command, stream stdout/stderr, timeout |
-| **File operations** | `read`, `write`, `ls` | Transfer files, edit configs, browse directories |
-| **Screenshots** | `screenshot` | Capture full screen or specific output |
-| **Input automation** | `click`, `type`, `key`, `mouse`, `scroll`, `drag` | Click buttons, type text, send shortcuts, drag & drop |
-| **Clipboard** | `clip`, `board` | Read/write clipboard, or write + paste in one shot |
-| **System introspection** | `windows`, `a11y` | List open windows, dump accessibility tree |
-| **Device management** | `devices` | List connected nodes, target specific device |
-| **Service lifecycle** | `setup`, `uninstall`, `restart`, `status`, `info`, `log` | Install, manage, and monitor the daemon |
-| **Self-update** | `update` | Download latest release and restart automatically |
+| Capability               | Commands                                                 | What it does                                          |
+| ------------------------ | -------------------------------------------------------- | ----------------------------------------------------- |
+| **Shell execution**      | `exec`                                                   | Run any command, stream stdout/stderr, timeout        |
+| **File operations**      | `read`, `write`, `ls`                                    | Transfer files, edit configs, browse directories      |
+| **Screenshots**          | `screenshot`                                             | Capture full screen or specific output                |
+| **Input automation**     | `click`, `type`, `key`, `mouse`, `scroll`, `drag`        | Click buttons, type text, send shortcuts, drag & drop |
+| **Clipboard**            | `clip`, `board`                                          | Read/write clipboard, or write + paste in one shot    |
+| **System introspection** | `windows`, `a11y`                                        | List open windows, dump accessibility tree            |
+| **Device management**    | `devices`                                                | List connected nodes, target specific device          |
+| **Service lifecycle**    | `setup`, `uninstall`, `restart`, `status`, `info`, `log` | Install, manage, and monitor the daemon               |
+| **Self-update**          | `update`                                                 | Download latest release and restart automatically     |
 
 <details>
 <summary><b>Full command reference</b></summary>
@@ -82,6 +82,7 @@ rsk devices
 rsk wait <sec>
 rsk env
 ```
+
 </details>
 
 ---
@@ -127,23 +128,23 @@ rsk desktop-home screenshot --save ~/shot.png
   │  ┌─────────────────────────────────────────┐                   │
   │  │   rsk daemon                            │                   │
   │  │                                         │                   │
-  │  │  ┌─────────┐   ┌──────────────┐        │                   │
-  │  │  │ WS      │   │ HTTP monitor  │        │                   │
-  │  │  │ broker  │   │ :7800         │        │                   │
-  │  │  │ :7777   │   │ (auth req)    │        │                   │
-  │  │  └────┬────┘   └──────────────┘        │                   │
+  │  │  ┌─────────┐   ┌──────────────┐         │                   │
+  │  │  │ WS      │   │ HTTP monitor │         │                   │
+  │  │  │ broker  │   │ :7800        │         │                   │
+  │  │  │ :7777   │   │ (auth req)   │         │                   │
+  │  │  └────┬────┘   └──────────────┘         │                   │
   │  └───────┼─────────────────────────────────┘                   │
   └──────────┼─────────────────────────────────────────────────────┘
              │ WebSocket
   ┌──────────┼─────────────────────────────────────────────────────┐
-  │  ┌───────┴──────┐                                             │
-  │  │   rsk-node   │  ┌──────────────────────────────────────┐   │
-  │  │  (daemon)    │  │  Handlers:                            │   │
-  │  │              │  │  exec → read → write → ls             │   │
-  │  │  Dial-out    │  │  screenshot → click → type → key      │   │
-  │  │  connects to │  │  mouse → scroll → drag → clipboard    │   │
-  │  │  broker      │  │  windows → a11y                       │   │
-  │  └──────────────┘  └──────────────────────────────────────┘   │
+  │  ┌───────┴──────┐                                              │
+  │  │   rsk-node   │  ┌──────────────────────────────────────┐    │
+  │  │  (daemon)    │  │  Handlers:                           │    │
+  │  │              │  │  exec → read → write → ls            │    │
+  │  │  Dial-out    │  │  screenshot → click → type → key     │    │
+  │  │  connects to │  │  mouse → scroll → drag → clipboard   │    │
+  │  │  broker      │  │  windows → a11y                      │    │
+  │  └──────────────┘  └──────────────────────────────────────┘    │
   │                        Laptop / Workstation                    │
   └────────────────────────────────────────────────────────────────┘
 ```
