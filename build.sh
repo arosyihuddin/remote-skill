@@ -14,6 +14,17 @@ if [ "$1" = "release" ]; then
   EXE=""
 else
   SUFFIX=""
+  if [ ! -f .env ]; then
+    TOKEN=$(openssl rand -hex 16 2>/dev/null || echo "dev-$(date +%s)")
+    cat > .env <<EOF
+RSK_TOKEN=$TOKEN
+RSK_AGENT_LISTEN=0.0.0.0:7777
+RSK_MONITOR=127.0.0.1:7800
+RSK_NODE_SERVER_URL=ws://127.0.0.1:7777/agent
+RSK_NODE_DEVICE_ID=dev-$(hostname)
+EOF
+    echo "==> generated .env (token: $(printf '%.8s' "$TOKEN")...)"
+  fi
 fi
 
 VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")

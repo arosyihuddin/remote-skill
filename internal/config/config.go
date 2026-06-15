@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -214,6 +215,48 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
+}
+
+// LoadDotEnv reads a .env file and sets any variables not already present
+// in the environment. Searches CWD, executable dir, and its parent.
+func LoadDotEnv() {
+	candidates := []string{".env"}
+	if exe, err := os.Executable(); err == nil {
+		dir := filepath.Dir(exe)
+		candidates = append(candidates, filepath.Join(dir, ".env"))
+		candidates = append(candidates, filepath.Join(dir, "..", ".env"))
+	}
+	for _, path := range candidates {
+		if loadDotEnvFile(path) {
+			return
+		}
+	}
+}
+
+func loadDotEnvFile(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	scan := bufio.NewScanner(f)
+	for scan.Scan() {
+		line := strings.TrimSpace(scan.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		idx := strings.Index(line, "=")
+		if idx < 0 {
+			continue
+		}
+		k := strings.TrimSpace(line[:idx])
+		v := strings.TrimSpace(line[idx+1:])
+		v = strings.Trim(v, `"'`)
+		if os.Getenv(k) == "" {
+			os.Setenv(k, v)
+		}
+	}
+	return true
 }
 
 // parseBool accepts 1/0, true/false, yes/no, on/off (case-insensitive).

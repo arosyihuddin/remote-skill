@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -203,20 +204,31 @@ func (b *Broker) HandleAgentFrames(ctx context.Context, d *Device) error {
 // PickDeviceID returns the given id if non-empty, otherwise falls back to
 // the only connected device. Returns error if none or multiple.
 func (b *Broker) PickDeviceID(id string) (string, error) {
+	list := b.List()
 	if id != "" {
 		if b.Get(id) == nil {
-			return "", fmt.Errorf("%w: %s", ErrDeviceNotFound, id)
+			names := make([]string, len(list))
+			for i, d := range list {
+				names[i] = d.ID
+			}
+			if len(list) == 0 {
+				return "", fmt.Errorf("%w: %s (no devices connected)", ErrDeviceNotFound, id)
+			}
+			return "", fmt.Errorf("%w: %s (available: %s)", ErrDeviceNotFound, id, strings.Join(names, ", "))
 		}
 		return id, nil
 	}
-	list := b.List()
 	if len(list) == 0 {
 		return "", fmt.Errorf("no devices connected")
 	}
 	if len(list) == 1 {
 		return list[0].ID, nil
 	}
-	return "", fmt.Errorf("multiple devices connected, specify --device")
+	names := make([]string, len(list))
+	for i, d := range list {
+		names[i] = d.ID
+	}
+	return "", fmt.Errorf("multiple devices connected, specify device: %s", strings.Join(names, ", "))
 }
 
 // DeviceInfo is the publicly-exposed metadata.
@@ -282,26 +294,22 @@ func (b *Broker) HandleCLI(ctx context.Context, c *websocket.Conn, serverToken s
 	}
 
 	// Read request frame
-	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	req, err := readOneFrame(reqCtx, c)
+	readCtx, readCancel := context.WithTimeout(ctx, 30*time.Second)
+	req, err := readOneFrame(readCtx, c)
+	readCancel()
 	if err != nil {
 		return fmt.Errorf("read request: %w", err)
 	}
 
-	// Determine target device
-	deviceID := ""
-	// Pick the only connected device, or let the CLI specify
-	list := b.List()
-	if len(list) == 0 {
-		return fmt.Errorf("no devices connected")
+	deviceID, err := b.PickDeviceID(hello.DeviceID)
+	if err != nil {
+		ep, _ := json.Marshal(proto.ErrorPayload{Code: "device", Message: err.Error()})
+		return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeError, ID: req.ID, Payload: ep})
 	}
-	if len(list) == 1 {
-		deviceID = list[0].ID
-	} else {
-		// First device by default; CLI should specify
-		deviceID = list[0].ID
-	}
+
+	// Long timeout for forwarding to node (a11y, exec etc can be slow)
+	reqCtx, reqCancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer reqCancel()
 
 	// Handle local-only request types
 	switch req.Type {

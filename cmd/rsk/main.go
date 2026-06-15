@@ -37,6 +37,8 @@ var serviceUnit []byte
 var Version = "dev"
 
 func main() {
+	config.LoadDotEnv()
+
 	if len(os.Args) >= 2 {
 		switch os.Args[1] {
 		case "daemon":
@@ -385,11 +387,31 @@ func defaultDaemonConfigPath() string {
 	return ""
 }
 
+func defaultDBPath() string {
+	candidates := []string{"."}
+	if exe, err := os.Executable(); err == nil {
+		dir := filepath.Dir(exe)
+		candidates = append(candidates, dir)
+		candidates = append(candidates, filepath.Join(dir, ".."))
+	}
+	for _, dir := range candidates {
+		if _, err := os.Stat(filepath.Join(dir, ".env")); err == nil {
+			return filepath.Join(dir, "rsk.db")
+		}
+	}
+	if h, err := os.UserHomeDir(); err == nil {
+		dir := h + "/.local/share/rsk"
+		os.MkdirAll(dir, 0755)
+		return dir + "/rsk.db"
+	}
+	return "rsk.db"
+}
+
 func runDaemon(args []string) {
 	fs := flag.NewFlagSet("daemon", flag.ExitOnError)
 	defCfg := defaultDaemonConfigPath()
 	cfgPath := fs.String("config", defCfg, "path to config file")
-	dbPath := fs.String("db", "rsk.db", "path to shortcuts database")
+	dbPath := fs.String("db", defaultDBPath(), "path to shortcuts database")
 	_ = fs.Parse(args)
 
 	cfg, err := config.LoadServerConfig(*cfgPath)
