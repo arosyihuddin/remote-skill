@@ -375,6 +375,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  a11y [--id N] [--depth N] [--role name] [--show-all] [--monitor N] [--all]\n")
 	fmt.Fprintf(os.Stderr, "                        Accessibility tree in Toon CSV (--monitor: filter by monitor, --all: all monitors)\n")
 	fmt.Fprintf(os.Stderr, "  monitors            List monitors\n")
+	fmt.Fprintf(os.Stderr, "  cursorpos           Get current cursor position\n")
 	fmt.Fprintf(os.Stderr, "  wait <sec>          Sleep N seconds\n")
 	fmt.Fprintf(os.Stderr, "  env                 Show env vars\n")
 	fmt.Fprintf(os.Stderr, "  clip get|set        Clipboard operations\n")
@@ -626,6 +627,7 @@ func registerMonitoringRoutes(mux *http.ServeMux, br *broker.Broker, database *d
 	mux.HandleFunc("/windows", handleCall(br, proto.TypeWindows, func() any { return &struct{}{} }))
 	mux.HandleFunc("/a11y/tree", handleCall(br, proto.TypeAccessibilityTree, func() any { return &struct{}{} }))
 	mux.HandleFunc("/monitors", handleCall(br, proto.TypeMonitors, func() any { return &proto.MonitorsRequest{} }))
+	mux.HandleFunc("/cursorpos", handleCall(br, proto.TypeCursorPos, func() any { return &struct{}{} }))
 	mux.HandleFunc("/screen.ws", handlers.ServeScreenWS)
 	mux.HandleFunc("/exec/stream", handleExecStream(br))
 

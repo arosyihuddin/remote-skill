@@ -3,6 +3,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"syscall"
@@ -118,6 +119,8 @@ var (
 	mouseDev  *uinputDevice
 	kbdMu    sync.Mutex
 	mouseMu  sync.Mutex
+	screenW  int32 = 1920
+	screenH  int32 = 1080
 )
 
 func ioctl(fd int, op uintptr, arg uintptr) error {
@@ -272,6 +275,20 @@ func getMouse() (*uinputDevice, error) {
 	if mouseDev != nil {
 		return mouseDev, nil
 	}
+	if mons, err := detectMonitors(context.Background()); err == nil {
+		var maxW, maxH int
+		for _, m := range mons {
+			if m.X+m.Width > maxW {
+				maxW = m.X + m.Width
+			}
+			if m.Y+m.Height > maxH {
+				maxH = m.Y + m.Height
+			}
+		}
+		if maxW > 0 && maxH > 0 {
+			screenW, screenH = int32(maxW), int32(maxH)
+		}
+	}
 	absAxes := []uint16{0x00, 0x01}
 	absMin := []int32{0, 0}
 	absMax := []int32{65535, 65535}
@@ -412,8 +429,10 @@ func platformMoveMouse(x, y int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.sendEvent(evAbs, 0x00, int32(x))
-	m.sendEvent(evAbs, 0x01, int32(y))
+	absX := int32(x) * 65535 / screenW
+	absY := int32(y) * 65535 / screenH
+	m.sendEvent(evAbs, 0x00, absX)
+	m.sendEvent(evAbs, 0x01, absY)
 	return m.sync()
 }
 
@@ -448,8 +467,8 @@ func platformDragMouse(x1, y1, x2, y2 int, btn string) error {
 		code = btnLeft
 	}
 
-	m.sendEvent(evAbs, 0x00, int32(x1))
-	m.sendEvent(evAbs, 0x01, int32(y1))
+	m.sendEvent(evAbs, 0x00, int32(x1)*65535/screenW)
+	m.sendEvent(evAbs, 0x01, int32(y1)*65535/screenH)
 	m.sync()
 	sleep(50)
 
@@ -461,8 +480,8 @@ func platformDragMouse(x1, y1, x2, y2 int, btn string) error {
 	for i := 1; i <= steps; i++ {
 		x := x1 + (x2-x1)*i/steps
 		y := y1 + (y2-y1)*i/steps
-		m.sendEvent(evAbs, 0x00, int32(x))
-		m.sendEvent(evAbs, 0x01, int32(y))
+		m.sendEvent(evAbs, 0x00, int32(x)*65535/screenW)
+		m.sendEvent(evAbs, 0x01, int32(y)*65535/screenH)
 		m.sync()
 		sleep(10)
 	}

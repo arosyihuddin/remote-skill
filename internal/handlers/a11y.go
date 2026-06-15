@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os/exec"
 	"strings"
 	"time"
@@ -14,15 +15,15 @@ import (
 )
 
 type A11yNode struct {
-	ID       int            `json:"id,omitempty"`
-	Name     string         `json:"name"`
-	Role     string         `json:"role"`
-	Bounds   [4]int         `json:"bounds"`
-	Enabled  bool           `json:"enabled"`
-	Focused  bool           `json:"focused"`
-	Children []A11yNode     `json:"children,omitempty"`
-	depth    int            `json:"-"`
-	bus      string         `json:"-"`
+	ID       int             `json:"id,omitempty"`
+	Name     string          `json:"name"`
+	Role     string          `json:"role"`
+	Bounds   [4]int          `json:"bounds"`
+	Enabled  bool            `json:"enabled"`
+	Focused  bool            `json:"focused"`
+	Children []A11yNode      `json:"children,omitempty"`
+	depth    int             `json:"-"`
+	bus      string          `json:"-"`
 	path     dbus.ObjectPath `json:"-"`
 }
 
@@ -138,13 +139,13 @@ func AccessibilityTree(ctx context.Context, raw json.RawMessage, _ handler.Strea
 
 	depth := req.Depth
 	if depth <= 0 {
-		depth = 8
+		depth = 12
 	}
 
 	nextID := 1
 	done := make(chan A11yNode, 1)
 	go func() {
-		done <- walkA11yTree(a11y, "org.a11y.atspi.Registry", dbus.ObjectPath("/org/a11y/atspi/accessible/root"), 0, depth, &nextID)
+		done <- walkA11yTree(a11y, "org.a11y.atspi.Registry", dbus.ObjectPath("/org/a11y/atspi/accessible/root"), 0, depth, &nextID, false)
 	}()
 
 	var root A11yNode
@@ -153,6 +154,7 @@ func AccessibilityTree(ctx context.Context, raw json.RawMessage, _ handler.Strea
 	case <-time.After(12 * time.Second):
 		return nil, fmt.Errorf("a11y tree: timeout")
 	}
+	fixAppWindowCoords(&root)
 
 	if req.ID != nil {
 		node := findNodeByID(&root, *req.ID)
@@ -206,7 +208,7 @@ func getPath(v any) dbus.ObjectPath {
 	return ""
 }
 
-func walkA11yTree(conn *dbus.Conn, bus string, path dbus.ObjectPath, depth, maxDepth int, nextID *int) A11yNode {
+func walkA11yTree(conn *dbus.Conn, bus string, path dbus.ObjectPath, depth, maxDepth int, nextID *int, insideApp bool) A11yNode {
 	id := *nextID
 	*nextID++
 
@@ -257,7 +259,15 @@ func walkA11yTree(conn *dbus.Conn, bus string, path dbus.ObjectPath, depth, maxD
 	}
 
 	// Skip children of invisible background apps (saves DBus calls)
-	if depth >= 1 && !validBounds(node.Bounds) && !isInteractive(node.Role) && node.Name == "" {
+	// But keep all nodes inside app windows for coordinate fix
+	childInsideApp := insideApp
+	if node.Role == "panel" && node.Name == "Wayland window" && node.Bounds[2] > 0 && node.Bounds[3] > 0 {
+		childInsideApp = true
+	}
+
+	// Performance: don't descend into empty non-interactive nodes with no valid bounds.
+	// These contribute nothing to the output or the window-offset heuristic.
+	if !childInsideApp && !validBounds(node.Bounds) && !isInteractive(node.Role) && node.Name == "" && depth > 1 {
 		return node
 	}
 
@@ -278,7 +288,7 @@ func walkA11yTree(conn *dbus.Conn, bus string, path dbus.ObjectPath, depth, maxD
 			if childPath == "" || childPath == "@" {
 				continue
 			}
-			child := walkA11yTree(conn, childBus, childPath, depth+1, maxDepth, nextID)
+			child := walkA11yTree(conn, childBus, childPath, depth+1, maxDepth, nextID, childInsideApp)
 			node.Children = append(node.Children, child)
 		}
 	}
@@ -296,6 +306,145 @@ func findNodeByID(node *A11yNode, id int) *A11yNode {
 		}
 	}
 	return nil
+}
+
+type winRect struct {
+	bufX, bufY, bufW, bufH int // buffer rect — AT-SPI coords are relative to this origin
+	frameX, frameY         int // frame rect position (visible window on screen)
+	frameW, frameH         int // frame rect size (visible window dimensions)
+}
+
+func fixAppWindowCoords(root *A11yNode) {
+	wins := getWindowRects(root)
+	log.Printf("a11y fix: %d window rects from extension", len(wins))
+	for i, w := range wins {
+		log.Printf("  win[%d]: buf=(%d,%d,%d,%d) frame=(%d,%d,%d,%d)", i, w.bufX, w.bufY, w.bufW, w.bufH, w.frameX, w.frameY, w.frameW, w.frameH)
+	}
+	if len(wins) == 0 {
+		return
+	}
+	applyWindowOffset(root, wins)
+}
+
+// getWindowRects returns Wayland/app window rects used to convert window-relative
+// AT-SPI GetExtents coordinates into absolute screen coordinates.
+//
+// Prefers the GNOME Shell extension (exposes Meta.Window.get_frame_rect(), which
+// is already in absolute screen pixels) over AT-SPI "Wayland window" nodes. The
+// extension is the reliable source because on GNOME Shell every session has a
+// fullscreen background "Wayland window" at (0,0,screenW,screenH) in the AT-SPI
+// tree — using it causes pointInWindow to mark every node as already-absolute
+// and skip the offset entirely.
+func getWindowRects(root *A11yNode) []winRect {
+	return queryGNOMEExtWindows()
+}
+
+func queryGNOMEExtWindows() []winRect {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "gdbus", "call", "--session",
+		"--dest", "org.gnome.Shell",
+		"--object-path", "/org/gnome/Shell/Extensions/Windows",
+		"--method", "org.gnome.Shell.Extensions.Windows.List").Output()
+	if err != nil {
+		return nil
+	}
+	s := string(out)
+	start := strings.IndexByte(s, '\'')
+	end := strings.LastIndexByte(s, '\'')
+	if start < 0 || end <= start {
+		return nil
+	}
+	var wins []struct {
+		X, Y              int
+		BufX, BufY        int `json:"buf_x,omitempty"`
+		Width, Height     int
+		FrameW, FrameH    int `json:"frame_w,omitempty"`
+	}
+	if json.Unmarshal([]byte(s[start+1:end]), &wins) != nil {
+		return nil
+	}
+	out2 := make([]winRect, 0, len(wins))
+	for _, w := range wins {
+		if w.Width > 0 && w.Height > 0 {
+			fw, fh := w.FrameW, w.FrameH
+			if fw <= 0 {
+				fw = w.Width
+			}
+			if fh <= 0 {
+				fh = w.Height
+			}
+			bx, by := w.BufX, w.BufY
+			if bx == 0 && by == 0 && w.X != 0 {
+				bx, by = w.X, w.Y
+			}
+			out2 = append(out2, winRect{
+				bufX: bx, bufY: by, bufW: w.Width, bufH: w.Height,
+				frameX: w.X, frameY: w.Y, frameW: fw, frameH: fh,
+			})
+		}
+	}
+	return out2
+}
+
+func applyWindowOffset(node *A11yNode, wins []winRect) {
+	isShell := node.Role == "window" || node.Role == "desktop frame" ||
+		(node.Role == "panel" && strings.HasPrefix(node.Name, "Wayland")) ||
+		node.Role == "application"
+	if isShell {
+		for i := range node.Children {
+			applyWindowOffset(&node.Children[i], wins)
+		}
+		return
+	}
+
+	if len(wins) > 0 && node.Bounds[2] > 0 && node.Bounds[3] > 0 {
+		nx, ny := node.Bounds[0], node.Bounds[1]
+
+		alreadyAbs := false
+		for _, w := range wins {
+			if nx >= w.frameX && nx < w.frameX+w.frameW && ny >= w.frameY && ny < w.frameY+w.frameH {
+				alreadyAbs = true
+				break
+			}
+		}
+
+		if !alreadyAbs {
+			if nx == 0 && ny == 0 && node.Role != "frame" {
+				// (0,0) not inside any window and not an app frame → shell UI
+				for i := range node.Children {
+					applyWindowOffset(&node.Children[i], wins)
+				}
+				return
+			}
+
+			bestIdx := -1
+			bestArea := int(^uint(0) >> 1)
+			for i, w := range wins {
+				ax, ay := w.bufX+nx, w.bufY+ny
+				if ax >= w.frameX && ax < w.frameX+w.frameW && ay >= w.frameY && ay < w.frameY+w.frameH {
+					area := w.frameW * w.frameH
+					if area < bestArea {
+						bestArea = area
+						bestIdx = i
+					}
+				}
+			}
+			if bestIdx >= 0 {
+				w := wins[bestIdx]
+				newX := w.bufX + nx
+				newY := w.bufY + ny
+				log.Printf("a11y fix: node %q role=%s atspi=(%d,%d) -> abs=(%d,%d) [buf=(%d,%d) frame=(%d,%d,%d,%d)]",
+					node.Name, node.Role, nx, ny, newX, newY, w.bufX, w.bufY, w.frameX, w.frameY, w.frameW, w.frameH)
+				node.Bounds[0] = newX
+				node.Bounds[1] = newY
+			}
+		}
+	}
+
+	for i := range node.Children {
+		applyWindowOffset(&node.Children[i], wins)
+	}
 }
 
 func flattenTree(node A11yNode, showAll bool, roles []string, winMon map[int]int, parentID int, parentMon int, depth int) []FlatNode {
@@ -320,10 +469,13 @@ func flattenTree(node A11yNode, showAll bool, roles []string, winMon map[int]int
 
 // monitorByGeometry assigns monitor IDs to AT-SPI window/frame nodes using
 // geometry-based matching: height heuristic first, then IoU fallback.
+// On non-Hyprland environments, assigns all nodes to monitor 0.
 func monitorByGeometry(ctx context.Context, root *A11yNode) map[int]int {
 	mons := hyprctlMonitors(ctx)
 	if mons == nil {
-		return nil
+		result := make(map[int]int)
+		assignAllToMonitor(root, 0, result)
+		return result
 	}
 
 	layouts := make([]monLayout, len(mons))
@@ -448,6 +600,17 @@ func getClientRects(ctx context.Context) []hyprctlClientRect {
 		return nil
 	}
 	return raw
+}
+
+func assignAllToMonitor(node *A11yNode, mon int, result map[int]int) {
+	if node.Role == "window" || node.Role == "frame" {
+		if node.Bounds[2] > 0 && node.Bounds[3] > 0 {
+			result[node.ID] = mon
+		}
+	}
+	for i := range node.Children {
+		assignAllToMonitor(&node.Children[i], mon, result)
+	}
 }
 
 func walkAssignMonitors(node *A11yNode, layouts []monLayout, mons []hyprctlMon, clients []hyprctlClientRect, panelMons []int, state *walkState, result map[int]int) {

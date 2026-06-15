@@ -223,42 +223,12 @@ func MouseMove(ctx context.Context, payload json.RawMessage, _ handler.StreamWri
 
 	x, y := req.X, req.Y
 
-	mons, err := GetMonitors()
-	if err == nil && len(mons) > 0 {
-		minX, minY := 0, 0
-		maxX, maxY := 0, 0
-		for _, m := range mons {
-			if m.X < minX {
-				minX = m.X
-			}
-			if m.Y < minY {
-				minY = m.Y
-			}
-			if mx := m.X + m.Width; mx > maxX {
-				maxX = mx
-			}
-			if my := m.Y + m.Height; my > maxY {
-				maxY = my
-			}
-		}
-
-		canvasW := maxX - minX
-		canvasH := maxY - minY
-		if canvasW > 0 && canvasH > 0 {
-			absX := x
-			absY := y
-			if req.Monitor != nil {
-				idx := *req.Monitor
-				if idx >= 0 && idx < len(mons) {
-					m := mons[idx]
-					absX = x + m.X
-					absY = y + m.Y
-				}
-			}
-			absX -= minX
-			absY -= minY
-			x = int(float64(absX) / float64(canvasW) * 65535)
-			y = int(float64(absY) / float64(canvasH) * 65535)
+	if req.Monitor != nil {
+		mons, err := GetMonitors()
+		if err == nil && *req.Monitor >= 0 && *req.Monitor < len(mons) {
+			m := mons[*req.Monitor]
+			x += m.X
+			y += m.Y
 		}
 	}
 
@@ -278,4 +248,45 @@ func Drag(ctx context.Context, payload json.RawMessage, _ handler.StreamWriter) 
 		return nil, err
 	}
 	return proto.EmptyResult{OK: true}, nil
+}
+
+func CursorPos(ctx context.Context, _ json.RawMessage, _ handler.StreamWriter) (any, error) {
+	// Try hyprctl first (Hyprland)
+	if out, err := exec.CommandContext(ctx, "hyprctl", "cursorpos").Output(); err == nil {
+		var x, y int
+		if _, err := fmt.Sscanf(strings.TrimSpace(string(out)), "%d, %d", &x, &y); err == nil {
+			return proto.CursorPosResult{X: x, Y: y}, nil
+		}
+	}
+
+	// Try GNOME Shell extension D-Bus
+	if out, err := exec.CommandContext(ctx, "gdbus", "call", "--session",
+		"--dest", "org.gnome.Shell",
+		"--object-path", "/org/gnome/Shell/Extensions/Windows",
+		"--method", "org.gnome.Shell.Extensions.Windows.GetCursorPos").Output(); err == nil {
+		s := string(out)
+		start := strings.IndexByte(s, '\'')
+		end := strings.LastIndexByte(s, '\'')
+		if start != -1 && end > start {
+			var pos struct{ X, Y int }
+			if json.Unmarshal([]byte(s[start+1:end]), &pos) == nil {
+				return proto.CursorPosResult{X: pos.X, Y: pos.Y}, nil
+			}
+		}
+	}
+
+	// Try xdotool (X11)
+	if out, err := exec.CommandContext(ctx, "xdotool", "getmouselocation", "--shell").Output(); err == nil {
+		var x, y int
+		for _, line := range strings.Split(string(out), "\n") {
+			if strings.HasPrefix(line, "X=") {
+				fmt.Sscanf(line, "X=%d", &x)
+			} else if strings.HasPrefix(line, "Y=") {
+				fmt.Sscanf(line, "Y=%d", &y)
+			}
+		}
+		return proto.CursorPosResult{X: x, Y: y}, nil
+	}
+
+	return nil, fmt.Errorf("cursorpos: no tool available (try installing hyprctl or xdotool)")
 }

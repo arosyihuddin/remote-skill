@@ -42,6 +42,7 @@ const (
 	TypeDrag             MessageType = "drag"         // mouse drag
 	TypeBoard            MessageType = "board"        // clipboard write + paste
 	TypeMonitors         MessageType = "monitors"     // monitor layout
+	TypeCursorPos        MessageType = "cursorpos"    // current cursor position
 
 	// Responses (agent -> server)
 	TypeResponse MessageType = "response"
@@ -191,6 +192,12 @@ type MouseMoveRequest struct {
 	Y        int  `json:"y"`
 	Relative bool `json:"relative,omitempty"`
 	Monitor  *int `json:"monitor,omitempty"` // screen index (0-based), null = absolute in virtual canvas
+}
+
+// CursorPosResult returns the current cursor position.
+type CursorPosResult struct {
+	X int `json:"x"`
+	Y int `json:"y"`
 }
 
 // ClipboardReadRequest reads the system clipboard.

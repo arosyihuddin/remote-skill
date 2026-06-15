@@ -138,17 +138,21 @@ func (b *Broker) Register(d *Device) {
 }
 
 // Unregister removes a device only if it still owns the slot.
-// Cleans up all pending requests to prevent memory leaks.
+// Cleans up all pending requests to prevent memory leaks and hangs.
 func (b *Broker) Unregister(d *Device) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if cur, ok := b.devices[d.ID]; ok && cur == d {
 		delete(b.devices, d.ID)
 	}
-	// Clean up all pending requests
+	ep, _ := json.Marshal(proto.ErrorPayload{Code: "disconnect", Message: "device disconnected"})
 	d.pending.Range(func(key, value any) bool {
 		pr := value.(*PendingResponse)
 		pr.closeStream()
+		select {
+		case pr.Final <- proto.Frame{Type: proto.TypeError, Payload: ep}:
+		default:
+		}
 		d.pending.Delete(key)
 		return true
 	})
@@ -202,21 +206,29 @@ func (b *Broker) HandleAgentFrames(ctx context.Context, d *Device) error {
 }
 
 // PickDeviceID returns the given id if non-empty, otherwise falls back to
-// the only connected device. Returns error if none or multiple.
+// the only connected device. Supports case-insensitive and hostname matching.
 func (b *Broker) PickDeviceID(id string) (string, error) {
 	list := b.List()
 	if id != "" {
-		if b.Get(id) == nil {
-			names := make([]string, len(list))
-			for i, d := range list {
-				names[i] = d.ID
-			}
-			if len(list) == 0 {
-				return "", fmt.Errorf("%w: %s (no devices connected)", ErrDeviceNotFound, id)
-			}
-			return "", fmt.Errorf("%w: %s (available: %s)", ErrDeviceNotFound, id, strings.Join(names, ", "))
+		// Exact match
+		if b.Get(id) != nil {
+			return id, nil
 		}
-		return id, nil
+		// Fuzzy: case-insensitive ID
+		idLower := strings.ToLower(id)
+		for _, d := range list {
+			if strings.ToLower(d.ID) == idLower {
+				return d.ID, nil
+			}
+		}
+		names := make([]string, len(list))
+		for i, d := range list {
+			names[i] = d.ID
+		}
+		if len(list) == 0 {
+			return "", fmt.Errorf("%w: %s (no devices connected)", ErrDeviceNotFound, id)
+		}
+		return "", fmt.Errorf("%w: %s (available: %s)", ErrDeviceNotFound, id, strings.Join(names, ", "))
 	}
 	if len(list) == 0 {
 		return "", fmt.Errorf("no devices connected")
@@ -301,6 +313,14 @@ func (b *Broker) HandleCLI(ctx context.Context, c *websocket.Conn, serverToken s
 		return fmt.Errorf("read request: %w", err)
 	}
 
+	// Handle local-only request types (no device needed)
+	switch req.Type {
+	case proto.TypeDevices:
+		devices := b.List()
+		raw, _ := json.Marshal(devices)
+		return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeResponse, ID: req.ID, Payload: raw})
+	}
+
 	deviceID, err := b.PickDeviceID(hello.DeviceID)
 	if err != nil {
 		ep, _ := json.Marshal(proto.ErrorPayload{Code: "device", Message: err.Error()})
@@ -311,22 +331,47 @@ func (b *Broker) HandleCLI(ctx context.Context, c *websocket.Conn, serverToken s
 	reqCtx, reqCancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer reqCancel()
 
-	// Handle local-only request types
-	switch req.Type {
-	case proto.TypeDevices:
-		devices := b.List()
-		raw, _ := json.Marshal(devices)
-		return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeResponse, ID: req.ID, Payload: raw})
-	}
-
 	// Forward request to device
-	var raw json.RawMessage
-	if err := b.Call(reqCtx, deviceID, req.Type, json.RawMessage(req.Payload), &raw); err != nil {
-		ep, _ := json.Marshal(proto.ErrorPayload{Code: "proxy", Message: err.Error()})
+	dev := b.Get(deviceID)
+	if dev == nil {
+		ep, _ := json.Marshal(proto.ErrorPayload{Code: "device", Message: "device disconnected"})
 		return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeError, ID: req.ID, Payload: ep})
 	}
 
-	return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeResponse, ID: req.ID, Payload: raw})
+	streaming := false
+	if req.Type == proto.TypeExec {
+		var er proto.ExecRequest
+		if json.Unmarshal(req.Payload, &er) == nil {
+			streaming = er.Stream
+		}
+	}
+
+	pr, cleanup, err := dev.SendRequest(reqCtx, req.Type, json.RawMessage(req.Payload), streaming)
+	if err != nil {
+		ep, _ := json.Marshal(proto.ErrorPayload{Code: "proxy", Message: err.Error()})
+		return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeError, ID: req.ID, Payload: ep})
+	}
+	defer cleanup()
+
+	for {
+		select {
+		case <-reqCtx.Done():
+			ep, _ := json.Marshal(proto.ErrorPayload{Code: "timeout", Message: "request timed out"})
+			return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeError, ID: req.ID, Payload: ep})
+		case chunk, ok := <-pr.Stream:
+			if !ok {
+				continue
+			}
+			if err := writeOneFrame(ctx, c, chunk); err != nil {
+				return err
+			}
+		case final := <-pr.Final:
+			if final.Type == proto.TypeError {
+				return writeOneFrame(ctx, c, final)
+			}
+			return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeResponse, ID: req.ID, Payload: final.Payload})
+		}
+	}
 }
 
 // ErrDeviceNotFound is returned when the requested device ID is not connected.

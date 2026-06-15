@@ -73,7 +73,7 @@ var knownCommands = map[string]bool{
 	"exec": true, "read": true, "write": true, "ls": true,
 	"screenshot": true, "click": true, "type": true, "key": true,
 	"mouse": true, "clip": true, "scroll": true, "devices": true,
-	"windows": true, "a11y": true, "monitors": true, "drag": true, "board": true,
+	"windows": true, "a11y": true, "monitors": true, "cursorpos": true, "drag": true, "board": true,
 	"wait": true, "env": true,
 	"-h": true, "--help": true, "help": true,
 }
@@ -252,6 +252,8 @@ func sendRequest(serverURL, token, device, cmdType string, payload any, stream b
 		msgType = proto.TypeBoard
 	case "monitors":
 		msgType = proto.TypeMonitors
+	case "cursorpos":
+		msgType = proto.TypeCursorPos
 	case "devices":
 		msgType = proto.TypeDevices
 	default:
@@ -329,6 +331,8 @@ func buildPayload(cmd string, args []string) (any, error) {
 	case "a11y":
 		return buildA11yPayload(args)
 	case "monitors":
+		return struct{}{}, nil
+	case "cursorpos":
 		return struct{}{}, nil
 	case "drag":
 		return buildDragPayload(args)
@@ -803,6 +807,7 @@ func printUsage(_ string) {
 	fmt.Fprintf(os.Stderr, "  a11y [--id N] [--depth N] [--role name] [--show-all] [--monitor N] [--all]\n")
 	fmt.Fprintf(os.Stderr, "                        Accessibility tree in Toon CSV (--monitor: filter by monitor, --all: all monitors)\n")
 	fmt.Fprintf(os.Stderr, "  monitors                List monitors\n")
+	fmt.Fprintf(os.Stderr, "  cursorpos               Get current cursor position\n")
 	fmt.Fprintf(os.Stderr, "  wait <sec>              Sleep N seconds\n")
 	fmt.Fprintf(os.Stderr, "  env                     Show env vars\n")
 	fmt.Fprintf(os.Stderr, "  clip get|set            Clipboard operations\n")
