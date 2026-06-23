@@ -74,7 +74,7 @@ var knownCommands = map[string]bool{
 	"screenshot": true, "click": true, "type": true, "key": true,
 	"mouse": true, "clip": true, "scroll": true, "devices": true,
 	"windows": true, "a11y": true, "monitors": true, "cursorpos": true, "drag": true, "board": true,
-	"wait": true, "env": true,
+	"apps": true, "open": true, "wait": true, "env": true,
 	"-h": true, "--help": true, "help": true,
 }
 
@@ -238,6 +238,10 @@ func sendRequest(serverURL, token, device, cmdType string, payload any, stream b
 		msgType = proto.TypeMouse
 	case "scroll":
 		msgType = proto.TypeScroll
+	case "apps":
+		msgType = proto.TypeAppList
+	case "open":
+		msgType = proto.TypeAppLaunch
 	case "clip", "clip-get":
 		msgType = proto.TypeClipboardRead
 	case "clip-set":
@@ -338,6 +342,10 @@ func buildPayload(cmd string, args []string) (any, error) {
 		return buildDragPayload(args)
 	case "board":
 		return buildBoardPayload(args)
+	case "apps":
+		return buildAppsPayload(args)
+	case "open":
+		return buildOpenPayload(args)
 	case "clip", "clip-get", "clip-set":
 		return buildClipPayload(args)
 	default:
@@ -649,6 +657,24 @@ func buildA11yPayload(args []string) (any, error) {
 	return req, nil
 }
 
+func buildAppsPayload(args []string) (any, error) {
+	req := &proto.AppListRequest{}
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--filter" && i+1 < len(args) {
+			req.Filter = args[i+1]
+			i++
+		}
+	}
+	return req, nil
+}
+
+func buildOpenPayload(args []string) (any, error) {
+	if len(args) == 0 || args[0] == "" {
+		return nil, fmt.Errorf("usage: rsk open \"<app-name>\"")
+	}
+	return &proto.AppLaunchRequest{Name: args[0], Args: args[1:]}, nil
+}
+
 func buildBoardPayload(args []string) (any, error) {
 	if len(args) == 0 || args[0] == "" {
 		return nil, fmt.Errorf("usage: rsk board \"<text>\"")
@@ -808,6 +834,8 @@ func printUsage(_ string) {
 	fmt.Fprintf(os.Stderr, "                        Accessibility tree in Toon CSV (--monitor: filter by monitor, --all: all monitors)\n")
 	fmt.Fprintf(os.Stderr, "  monitors                List monitors\n")
 	fmt.Fprintf(os.Stderr, "  cursorpos               Get current cursor position\n")
+	fmt.Fprintf(os.Stderr, "  apps [--filter name]    List installed GUI applications\n")
+	fmt.Fprintf(os.Stderr, "  open \"<name>\"           Launch an application by name\n")
 	fmt.Fprintf(os.Stderr, "  wait <sec>              Sleep N seconds\n")
 	fmt.Fprintf(os.Stderr, "  env                     Show env vars\n")
 	fmt.Fprintf(os.Stderr, "  clip get|set            Clipboard operations\n")

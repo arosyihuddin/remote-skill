@@ -43,6 +43,8 @@ const (
 	TypeBoard            MessageType = "board"        // clipboard write + paste
 	TypeMonitors         MessageType = "monitors"     // monitor layout
 	TypeCursorPos        MessageType = "cursorpos"    // current cursor position
+	TypeAppList          MessageType = "app_list"     // list installed applications
+	TypeAppLaunch        MessageType = "app_launch"   // launch an application
 
 	// Responses (agent -> server)
 	TypeResponse MessageType = "response"
@@ -262,6 +264,32 @@ type MonitorInfo struct {
 	Height  int     `json:"h"`
 	Scale   float64 `json:"scale,omitempty"`
 	Focused bool    `json:"focused,omitempty"`
+}
+
+// AppInfo describes a desktop application.
+type AppInfo struct {
+	Name       string `json:"name"`
+	Exec       string `json:"exec"`
+	Icon       string `json:"icon,omitempty"`
+	Comment    string `json:"comment,omitempty"`
+	Categories string `json:"categories,omitempty"`
+	Terminal   bool   `json:"terminal"`
+}
+
+// AppListRequest requests the list of installed GUI applications.
+type AppListRequest struct {
+	Filter string `json:"filter,omitempty"`
+}
+
+// AppListResult contains the list of installed applications.
+type AppListResult struct {
+	Apps []AppInfo `json:"apps"`
+}
+
+// AppLaunchRequest launches an application by name.
+type AppLaunchRequest struct {
+	Name string   `json:"name"`
+	Args []string `json:"args,omitempty"`
 }
 
 // EmptyResult is used for actions with no return data beyond ok.

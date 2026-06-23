@@ -163,6 +163,8 @@ func runDaemon(args []string) {
 	n.Register(proto.TypeAccessibilityTree, deps.WrapAccessibilityTree())
 	n.Register(proto.TypeMonitors, deps.WrapMonitors())
 	n.Register(proto.TypeCursorPos, deps.WrapCursorPos())
+	n.Register(proto.TypeAppList, deps.WrapAppList())
+	n.Register(proto.TypeAppLaunch, deps.WrapAppLaunch())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -200,4 +200,6 @@ func (d *Deps) WrapWindows() handler.Handler          { return d.wrapGUI("window
 func (d *Deps) WrapAccessibilityTree() handler.Handler { return d.wrapGUI("accessibility_tree", AccessibilityTree) }
 func (d *Deps) WrapMonitors() handler.Handler           { return d.wrapGUI("monitors", Monitors) }
 func (d *Deps) WrapCursorPos() handler.Handler          { return d.wrapGUI("cursorpos", CursorPos) }
+func (d *Deps) WrapAppList() handler.Handler            { return d.wrapGUI("app_list", ListApps) }
+func (d *Deps) WrapAppLaunch() handler.Handler           { return d.wrapGUI("app_launch", LaunchApp) }
 

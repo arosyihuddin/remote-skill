@@ -80,6 +80,16 @@ rsk drag 100 100 300 300 [--button left|right|middle]
 # Board (clipboard write + paste)
 rsk board "Hello World"
 
+# List installed GUI applications (from .desktop files)
+rsk apps
+rsk apps --filter browser      # filter by name/comment/category
+
+# Launch an application by name
+rsk open "Firefox"
+rsk open "Code"
+rsk open "LibreWolf"
+rsk open "Files"               # file manager
+
 # List connected devices
 rsk devices
 
@@ -216,7 +226,11 @@ rsk scroll --dy 10          # up
 # 6. Cursor position
 rsk cursorpos
 
-# 7. Verifikasi
+# 7. Launch app
+rsk apps --filter browser      # cari app
+rsk open "LibreWolf"           # buka
+
+# 8. Verifikasi
 rsk windows
 rsk a11y
 ```
