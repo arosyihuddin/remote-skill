@@ -5,6 +5,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -549,7 +550,7 @@ func platformKeyCombo(parts []string) error {
 	key := parts[len(parts)-1]
 
 	for _, m := range mods {
-		code, ok := keyNameMap[m]
+		code, ok := keyNameMap[strings.ToLower(m)]
 		if !ok {
 			return fmt.Errorf("unknown modifier: %s", m)
 		}
@@ -557,7 +558,7 @@ func platformKeyCombo(parts []string) error {
 	}
 	k.sync()
 
-	code, ok := keyNameMap[key]
+	code, ok := keyNameMap[strings.ToLower(key)]
 	if !ok {
 		char, ok2 := charKeyMap[[]rune(key)[0]]
 		if !ok2 {
@@ -572,7 +573,7 @@ func platformKeyCombo(parts []string) error {
 	k.sync()
 
 	for i := len(mods) - 1; i >= 0; i-- {
-		code := keyNameMap[mods[i]]
+		code := keyNameMap[strings.ToLower(mods[i])]
 		k.sendEvent(evKey, code, 0)
 	}
 	k.sync()

@@ -336,7 +336,45 @@ func fixAppWindowCoords(root *A11yNode) {
 // tree — using it causes pointInWindow to mark every node as already-absolute
 // and skip the offset entirely.
 func getWindowRects(root *A11yNode) []winRect {
-	return queryGNOMEExtWindows()
+	// Try GNOME extension first
+	if wins := queryGNOMEExtWindows(); len(wins) > 0 {
+		return wins
+	}
+	// Fall back to Hyprland
+	return queryHyprlandWindows()
+}
+
+func queryHyprlandWindows() []winRect {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "hyprctl", "clients", "-j")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	var clients []struct {
+		At   [2]int `json:"at"`
+		Size [2]int `json:"size"`
+	}
+	if err := json.Unmarshal(out, &clients); err != nil {
+		return nil
+	}
+
+	wins := make([]winRect, 0, len(clients))
+	for _, c := range clients {
+		wins = append(wins, winRect{
+			frameX: c.At[0],
+			frameY: c.At[1],
+			frameW: c.Size[0],
+			frameH: c.Size[1],
+			bufX:   c.At[0], // Hyprland: buffer rect = frame rect
+			bufY:   c.At[1],
+			bufW:   c.Size[0],
+			bufH:   c.Size[1],
+		})
+	}
+	return wins
 }
 
 func queryGNOMEExtWindows() []winRect {
@@ -388,63 +426,96 @@ func queryGNOMEExtWindows() []winRect {
 }
 
 func applyWindowOffset(node *A11yNode, wins []winRect) {
-	isShell := node.Role == "window" || node.Role == "desktop frame" ||
-		(node.Role == "panel" && strings.HasPrefix(node.Name, "Wayland")) ||
-		node.Role == "application"
-	if isShell {
-		for i := range node.Children {
-			applyWindowOffset(&node.Children[i], wins)
+	var propagate func(n *A11yNode, offX, offY int)
+	propagate = func(n *A11yNode, offX, offY int) {
+		isShell := n.Role == "window" || n.Role == "desktop frame" ||
+			(n.Role == "panel" && strings.HasPrefix(n.Name, "Wayland")) ||
+			n.Role == "application"
+		if isShell {
+			for i := range n.Children {
+				propagate(&n.Children[i], offX, offY)
+			}
+			return
 		}
-		return
+
+		// Apply inherited offset from parent frames
+		n.Bounds[0] += offX
+		n.Bounds[1] += offY
+
+		fix := n.attemptWindowFix(wins)
+		childOffX, childOffY := offX, offY
+		if fix.applied {
+			childOffX += fix.deltaX
+			childOffY += fix.deltaY
+		}
+
+		for i := range n.Children {
+			propagate(&n.Children[i], childOffX, childOffY)
+		}
+	}
+	propagate(node, 0, 0)
+}
+
+type windowFix struct {
+	applied  bool
+	deltaX   int
+	deltaY   int
+}
+
+func (node *A11yNode) attemptWindowFix(wins []winRect) windowFix {
+	if len(wins) == 0 || node.Bounds[2] <= 0 || node.Bounds[3] <= 0 {
+		return windowFix{}
 	}
 
-	if len(wins) > 0 && node.Bounds[2] > 0 && node.Bounds[3] > 0 {
-		nx, ny := node.Bounds[0], node.Bounds[1]
+	nx, ny := node.Bounds[0], node.Bounds[1]
 
-		alreadyAbs := false
-		for _, w := range wins {
-			if nx >= w.frameX && nx < w.frameX+w.frameW && ny >= w.frameY && ny < w.frameY+w.frameH {
-				alreadyAbs = true
-				break
-			}
-		}
-
-		if !alreadyAbs {
-			if nx == 0 && ny == 0 && node.Role != "frame" {
-				// (0,0) not inside any window and not an app frame → shell UI
-				for i := range node.Children {
-					applyWindowOffset(&node.Children[i], wins)
-				}
-				return
-			}
-
-			bestIdx := -1
-			bestArea := int(^uint(0) >> 1)
-			for i, w := range wins {
-				ax, ay := w.bufX+nx, w.bufY+ny
-				if ax >= w.frameX && ax < w.frameX+w.frameW && ay >= w.frameY && ay < w.frameY+w.frameH {
-					area := w.frameW * w.frameH
-					if area < bestArea {
-						bestArea = area
-						bestIdx = i
-					}
-				}
-			}
-			if bestIdx >= 0 {
-				w := wins[bestIdx]
-				newX := w.bufX + nx
-				newY := w.bufY + ny
-				log.Printf("a11y fix: node %q role=%s atspi=(%d,%d) -> abs=(%d,%d) [buf=(%d,%d) frame=(%d,%d,%d,%d)]",
-					node.Name, node.Role, nx, ny, newX, newY, w.bufX, w.bufY, w.frameX, w.frameY, w.frameW, w.frameH)
-				node.Bounds[0] = newX
-				node.Bounds[1] = newY
-			}
+	// Check if already absolute (inside any window frame)
+	for _, w := range wins {
+		if nx >= w.frameX && nx < w.frameX+w.frameW && ny >= w.frameY && ny < w.frameY+w.frameH {
+			return windowFix{}
 		}
 	}
 
-	for i := range node.Children {
-		applyWindowOffset(&node.Children[i], wins)
+	// (0,0) not inside any window and not a frame → shell UI, skip
+	if nx == 0 && ny == 0 && node.Role != "frame" {
+		return windowFix{}
 	}
+
+	// Find best matching window by size similarity
+	bestIdx := -1
+	bestDelta := int(^uint(0) >> 1)
+	for i, w := range wins {
+		ax, ay := w.bufX+nx, w.bufY+ny
+		if ax >= w.frameX && ax < w.frameX+w.frameW && ay >= w.frameY && ay < w.frameY+w.frameH {
+			dw := w.frameW - node.Bounds[2]
+			dh := w.frameH - node.Bounds[3]
+			delta := dw*dw + dh*dh
+			if delta < bestDelta {
+				bestDelta = delta
+				bestIdx = i
+			}
+		}
+	}
+
+	if bestIdx < 0 {
+		return windowFix{}
+	}
+
+	nodeArea := node.Bounds[2] * node.Bounds[3]
+	if bestDelta > nodeArea {
+		log.Printf("a11y fix: skip node %q role=%s atspi=(%d,%d) size=%dx%d [bestDelta=%d > nodeArea=%d]",
+			node.Name, node.Role, nx, ny, node.Bounds[2], node.Bounds[3], bestDelta, nodeArea)
+		return windowFix{}
+	}
+
+	w := wins[bestIdx]
+	newX := w.bufX + nx
+	newY := w.bufY + ny
+	log.Printf("a11y fix: node %q role=%s atspi=(%d,%d) -> abs=(%d,%d) [buf=(%d,%d) frame=(%d,%d,%d,%d)]",
+		node.Name, node.Role, nx, ny, newX, newY, w.bufX, w.bufY, w.frameX, w.frameY, w.frameW, w.frameH)
+	node.Bounds[0] = newX
+	node.Bounds[1] = newY
+	return windowFix{applied: true, deltaX: newX - nx, deltaY: newY - ny}
 }
 
 func flattenTree(node A11yNode, showAll bool, roles []string, winMon map[int]int, parentID int, parentMon int, depth int) []FlatNode {
