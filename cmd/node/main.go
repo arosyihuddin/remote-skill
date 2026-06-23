@@ -376,6 +376,7 @@ ALLOW_GUI=%v
 			fmt.Printf("  ✔ binary copied: %s\n", binTarget)
 		}
 	} else {
+		os.Chmod(binTarget, 0755)
 		fmt.Printf("  ✔ binary already in place: %s\n", binTarget)
 	}
 
