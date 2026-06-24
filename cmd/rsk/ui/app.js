@@ -233,6 +233,58 @@ $('clipWrite').onclick=function(){const t=$('clipText').value;if(t)api('POST','/
 /* --- shell --- */
 var cmdHistory=[]
 var histIdx=-1
+var user=''
+var pwd=''
+var dirDisp='~'
+var gitBranch=''
+var gitStatus=''
+
+function fetchPromptInfo(){
+  return api('POST','/exec',{cmd:['sh','-c',`whoami 2>/dev/null;echo "---";pwd 2>/dev/null;echo "---";git symbolic-ref --short HEAD 2>/dev/null||true;echo "---";git status --porcelain 2>/dev/null|head -20||true`],timeout_sec:5}).then(r=>{
+    if(!r.stdout)return
+    const parts=r.stdout.split('---\n')
+    user=(parts[0]||'').trim()||'user'
+    const home='/home/'+user
+    pwd=home
+    dirDisp='~'
+    gitBranch=(parts[2]||'').trim()
+    var gs=parts[3]||''
+    gitStatus=gs.trim()?calcGitStatus(gs):''
+    renderPrompt($('inpPrompt'))
+  }).catch(()=>{})
+}
+
+function calcGitStatus(porcelain){
+  var s={m:0,a:0,d:0,'?':0}
+  porcelain.split('\n').forEach(l=>{
+    var c=l.charAt(0)
+    if(c==='M'||c===' '&&l.charAt(1)==='M')s.m++
+    else if(c==='A')s.a++
+    else if(c==='D')s.d++
+    else if(c==='?')s['?']++
+  })
+  var out=[]
+  if(s.a)out.push('+'+s.a)
+  if(s.m)out.push('!'+s.m)
+  if(s.d)out.push('x'+s.d)
+  if(s['?'])out.push('?'+s['?'])
+  return out.join(' ')
+}
+
+function renderPrompt(container){
+  var h='<span class="prompt-seg usr">'+escapeHtml(user)+'</span>'
+  h+='<span class="prompt-seg dir">'+escapeHtml(dirDisp)+'</span>'
+  if(gitBranch) h+='<span class="prompt-seg git">'+escapeHtml(gitBranch)+(gitStatus?' '+escapeHtml(gitStatus):'')+'</span>'
+  h+='<span class="prompt-seg time" id="promptTime">'+now()+'</span>'
+  container.innerHTML=h
+}
+
+function now(){
+  var d=new Date()
+  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')
+}
+
+setInterval(function(){var e=$('promptTime');if(e)e.textContent=now()},10000)
 
 $('shellCmd').onkeydown=function(e){
   if(e.key==='Enter'){
@@ -243,11 +295,19 @@ $('shellCmd').onkeydown=function(e){
     cmdHistory.push(cmd)
     histIdx=cmdHistory.length
     const body=$('termBody'),inputLine=body.querySelector('.term-input-line')
-    body.insertBefore(termLine('<span class="prompt">$</span> <span class="cmd">'+escapeHtml(cmd)+'</span>'),inputLine)
+    const[prLine,cmdLine]=renderCmdLine(cmd)
+    body.insertBefore(prLine,inputLine)
+    body.insertBefore(cmdLine,inputLine)
     const runLine=termLine('<span style="color:#666">running...</span>',true)
     body.insertBefore(runLine,inputLine)
-    body.scrollTop=body.scrollHeight
-    api('POST','/exec',{cmd:['sh','-c',cmd],timeout_sec:30}).then(r=>{
+    inputLine.scrollIntoView({block:'end'})
+    if(/^cd(\s|$)/.test(cmd)){
+      body.removeChild(runLine)
+      handleCD(cmd)
+      return
+    }
+    const realCmd=pwd?'cd '+quote(pwd)+' && '+cmd:cmd
+    api('POST','/exec',{cmd:['sh','-c',realCmd],timeout_sec:30}).then(r=>{
       body.removeChild(runLine)
       if(/^ls(\s|$)/.test(cmd)&&r.stdout){
         body.insertBefore(lsGrid(r.stdout.trim()),inputLine)
@@ -258,12 +318,12 @@ $('shellCmd').onkeydown=function(e){
         if(r.exit_code!==0)s+='\n<span class="error">[exit '+r.exit_code+']</span>'
         if(s) body.insertBefore(termLine(s,true),inputLine)
       }
-      body.scrollTop=body.scrollHeight
+      inputLine.scrollIntoView({block:'end'})
       $('shellCmd').focus()
     }).catch(e=>{
       body.removeChild(runLine)
       body.insertBefore(termLine('<span class="error">Error: '+escapeHtml(e.message)+'</span>',true),inputLine)
-      body.scrollTop=body.scrollHeight
+      inputLine.scrollIntoView({block:'end'})
       $('shellCmd').focus()
     })
   }else if(e.key==='ArrowUp'){
@@ -281,13 +341,69 @@ $('shellCmd').onkeydown=function(e){
 }
 $('shellOutput').onclick=function(){$('shellCmd').focus()}
 
+function renderCmdLine(cmd){
+  const promptLine=document.createElement('div');promptLine.className='term-line'
+  promptLine.innerHTML='<div class="prompt">'+renderPromptStr()+'</div>'
+  const cmdLine=document.createElement('div');cmdLine.className='term-line'
+  cmdLine.innerHTML='<span style="color:var(--green);font-weight:600">-&gt;</span> <span class="cmd">'+escapeHtml(cmd)+'</span>'
+  return[promptLine,cmdLine]
+}
+
+function renderPromptStr(){
+  var h='<span class="prompt-seg usr">'+escapeHtml(user)+'</span>'
+  h+='<span class="prompt-seg dir">'+escapeHtml(dirDisp)+'</span>'
+  if(gitBranch) h+='<span class="prompt-seg git">'+escapeHtml(gitBranch)+(gitStatus?' '+escapeHtml(gitStatus):'')+'</span>'
+  h+='<span class="prompt-seg time">'+now()+'</span>'
+  return h
+}
+
+function handleCD(cmd){
+  var target=(cmd.match(/^cd\s+(.+)/)||[])[1]||''
+  if(!target||target==='~'){target='~'}
+  target=target.replace(/^~/, '/home/'+user)
+  api('POST','/exec',{cmd:['sh','-c','cd '+quote(pwd)+' && cd '+quote(target)+' && pwd && echo "---" && (git symbolic-ref --short HEAD 2>/dev/null||echo "") && echo "---" && (git status --porcelain 2>/dev/null|head -20||true)'],timeout_sec:5}).then(r=>{
+    if(r.stdout){
+      var parts=r.stdout.split('---\n')
+      pwd=(parts[0]||'').trim()
+      dirDisp=pwd.replace(RegExp('^'+escapeRegex('/home/'+user)),'~')
+      gitBranch=(parts[1]||'').trim()
+      var gs=(parts[2]||'').trim()
+      gitStatus=gs?calcGitStatus(gs):''
+      renderPrompt($('inpPrompt'))
+    }
+  }).catch(()=>{})
+}
+
+function quote(s){return "'"+s.replace(/'/g,"'\\''")+"'"}
+
 function termLine(html,isOutput){const d=document.createElement('div');d.className='term-line'+(isOutput?' output':'');d.innerHTML=html;return d}
+
 function lsGrid(text){
   const items=text.split(/\s+/).filter(Boolean)
   const d=document.createElement('div');d.className='ls-grid'
-  items.forEach(n=>{const s=document.createElement('span');s.className='ls-item';s.textContent=n;d.appendChild(s)})
+  items.forEach(n=>{
+    const s=document.createElement('span');s.className='ls-item '+fileTypeClass(n);s.textContent=n;d.appendChild(s)
+  })
   return d
 }
+
+function fileTypeClass(name){
+  if(name.endsWith('/'))return 'dir'
+  var ext=name.split('.').pop().toLowerCase()
+  if(ext==='go')return'go'
+  if(['sh','bash','zsh','fish'].includes(ext))return'sh'
+  if(['md','txt','markdown'].includes(ext))return'md'
+  if(['png','jpg','jpeg','gif','svg','webp','ico'].includes(ext))return'img'
+  if(['zip','tar','gz','bz2','xz','7z','rar'].includes(ext))return'zip'
+  if(['db','sqlite','sqlite3'].includes(ext))return'db'
+  if(['json','yaml','yml','toml','ini','cfg','conf'].includes(ext))return'cfg'
+  if(ext===''||['exe','bin','AppImage'].includes(ext))return'exe'
+  return''
+}
+
+// init prompt — render before async fetch
+renderPrompt($('inpPrompt'))
+fetchPromptInfo()
 
 /* --- files --- */
 $('fileLsBtn').onclick=function(){listDir($('filePath').value)}
@@ -385,6 +501,7 @@ $('scList').onclick=function(e){
 /* --- utils --- */
 function escapeHtml(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function escapeAttr(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function escapeRegex(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
 function formatSize(n){if(!n&&n!==0)return'';if(n<1024)return n+'B';if(n<1024*1024)return(n/1024).toFixed(1)+'K';return(n/1024/1024).toFixed(1)+'M'}
 
 /* --- init --- */

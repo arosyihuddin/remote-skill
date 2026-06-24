@@ -1,230 +1,500 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Remote Skill</title>
-<link href="/static/style.css" rel="stylesheet">
-</head>
-<body>
-
-<div id="loginOverlay">
-  <div id="loginBox">
-    <h1>Remote Skill</h1>
-    <p>Enter password to access dashboard</p>
-    <div class="pw-wrap">
-      <input type="password" id="loginToken" placeholder="password" autocomplete="off">
-      <button class="eye" id="pwEye">
-        <svg class="eye-open" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        <svg class="eye-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-      </button>
-    </div>
-    <button class="primary" id="loginBtn">Unlock</button>
-    <div id="loginError"></div>
-  </div>
-</div>
-
-<header>
-  <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
-  <h1>Remote Skill</h1>
-  <select id="deviceSelector"><option value="">— no devices —</option></select>
-  <button id="logoutBtn">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-    Logout
-  </button>
-</header>
-
-<div class="wrap">
-
-<nav class="sidebar" id="sidebar">
-  <button class="nav-item active" data-tab="dashboard">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-    <span class="tip">Dashboard</span>
-  </button>
-  <button class="nav-item" data-tab="remote">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-    <span class="tip">Remote</span>
-  </button>
-  <button class="nav-item" data-tab="shell">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-    <span class="tip">Shell</span>
-  </button>
-  <button class="nav-item" data-tab="files">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-    <span class="tip">Files</span>
-  </button>
-  <button class="nav-item" data-tab="shortcuts">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-    <span class="tip">Shortcuts</span>
-  </button>
-</nav>
-
-<div class="main active" id="tab-dashboard">
-  <div class="section">
-    <h2>System</h2>
-    <div class="dash-grid" id="dashGrid">
-      <div class="dash-card"><div class="lbl">Hostname</div><div class="val" id="dHostname">—</div></div>
-      <div class="dash-card"><div class="lbl">OS</div><div class="val" id="dOS">—</div></div>
-      <div class="dash-card"><div class="lbl">Uptime</div><div class="val" id="dUptime">—</div></div>
-      <div class="dash-card"><div class="lbl">Shell</div><div class="val" id="dShell">—</div></div>
-      <div class="dash-card"><div class="lbl">Home</div><div class="val" id="dHome">—</div></div>
-      <div class="dash-card"><div class="lbl">Desktop</div><div class="val" id="dDesktop">—</div></div>
-    </div>
-  </div>
-  <div class="section">
-    <h2>Quick Actions</h2>
-    <div class="row">
-      <button class="primary" id="qaExec">exec uname -a</button>
-      <button class="primary icon-btn" id="qaScreenshot">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        Screenshot
-      </button>
-    </div>
-  </div>
-  <div class="section" id="dashScreenshotSection" style="display:none">
-    <h2>Screenshot</h2>
-    <div class="screenshot-wrap" id="dashShotWrap"><span class="placeholder">Click button to capture</span><canvas id="dashShotCanvas" style="display:none"></canvas></div>
-  </div>
-</div>
-
-<div class="main" id="tab-remote">
-  <div class="section" style="display:flex;flex-direction:column">
-    <div class="row">
-      <button class="icon-btn" id="liveBtn">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        Start Live
-      </button>
-      <button class="icon-btn" id="shotBtn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        Screenshot
-      </button>
-      <span id="clickPos" style="font-size:10px;color:var(--text2);margin-left:auto"></span>
-    </div>
-    <div class="screenshot-wrap" id="screenWrap"><span class="placeholder" id="screenPlaceholder">Start Live or capture screenshot</span><canvas id="screenCanvas" style="display:none"></canvas></div>
-  </div>
-  <div class="section">
-    <h2>Touchpad</h2>
-    <div class="row">
-      <button id="modeToggle">Move</button>
-      <span style="font-size:10px;color:var(--text2)">tap to click</span>
-      <label>Sensitivity</label>
-      <input type="range" id="speedSlider" min="0.5" max="5" step="0.1" value="2" style="flex:1;max-width:120px">
-      <span id="speedLabel" style="font-size:11px;color:var(--text2);min-width:28px">2.0x</span>
-    </div>
-    <div class="touchpad" id="touchpad"><span class="touchpad-hint">Drag to move - Tap to click</span><div class="touchpad-cursor" id="touchpadCursor"></div></div>
-    <div class="row" style="margin-top:6px">
-      <label>X</label><input type="number" id="mouseX" value="500" style="width:60px">
-      <label>Y</label><input type="number" id="mouseY" value="300" style="width:60px">
-      <button class="primary" id="mouseGoBtn">Go</button>
-      <button id="clickLeft">Left</button>
-      <button id="clickRight">Right</button>
-      <button id="clickMiddle">Middle</button>
-      <button id="clickDouble">Double</button>
-    </div>
-  </div>
-  <div class="section">
-    <h2>Keyboard</h2>
-    <div class="row">
-      <input type="text" id="typeText" class="flex-1" placeholder="Type text here...">
-      <button class="primary" id="typeBtn">Type</button>
-    </div>
-    <div class="row" style="margin-top:6px">
-      <span style="font-size:10px;color:var(--text2)">Combos</span>
-      <div style="display:flex;flex-wrap:wrap;gap:3px">
-        <button data-combo="ctrl+c">Ctrl+C</button>
-        <button data-combo="ctrl+v">Ctrl+V</button>
-        <button data-combo="ctrl+a">Ctrl+A</button>
-        <button data-combo="ctrl+x">Ctrl+X</button>
-        <button data-combo="ctrl+z">Ctrl+Z</button>
-        <button data-combo="enter">Enter</button>
-        <button data-combo="tab">Tab</button>
-        <button data-combo="escape">Esc</button>
-        <button data-combo="delete">Del</button>
-        <button data-combo="backspace">BS</button>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Remote Skill</title>
+    <link href="/static/style.css?v=4" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="loginOverlay">
+      <div id="loginBox">
+        <h1>Remote Skill</h1>
+        <p>Enter password to access dashboard</p>
+        <div class="pw-wrap">
+          <input
+            type="password"
+            id="loginToken"
+            placeholder="password"
+            autocomplete="off"
+          />
+          <button class="eye" id="pwEye">
+            <svg
+              class="eye-open"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <svg
+              class="eye-off"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="display: none"
+            >
+              <path
+                d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"
+              />
+              <line x1="1" y1="1" x2="23" y2="23" />
+            </svg>
+          </button>
+        </div>
+        <button class="primary" id="loginBtn">Unlock</button>
+        <div id="loginError"></div>
       </div>
     </div>
-  </div>
-  <div class="section">
-    <h2>Clipboard</h2>
-    <div class="row">
-      <button id="clipRead">Read</button>
-      <input type="text" id="clipText" class="flex-1" placeholder="Text to write...">
-      <button id="clipWrite">Write</button>
-    </div>
-    <div class="output-box" id="clipOutput"></div>
-  </div>
-</div>
 
-<div class="main" id="tab-shell">
-  <div class="section" style="padding:0;overflow:hidden;display:flex;flex-direction:column;height:calc(100vh - 70px)">
-    <div class="term-box" id="shellOutput">
-      <div class="term-header">
-        <span class="term-dot r"></span>
-        <span class="term-dot y"></span>
-        <span class="term-dot g"></span>
-        <span class="term-title">bash</span>
+    <header>
+      <div class="traffic">
+        <span class="r"></span><span class="y"></span><span class="g"></span>
       </div>
-      <div class="term-body" id="termBody"><div class="term-input-line"><span class="prompt">$</span><input class="term-input" id="shellCmd" spellcheck="false" autofocus></div></div>
-    </div>
-  </div>
-</div>
+      <h1>Remote Skill</h1>
+      <select id="deviceSelector">
+        <option value="">— no devices —</option>
+      </select>
+      <button id="logoutBtn">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+          <polyline points="16 17 21 12 16 7" />
+          <line x1="21" y1="12" x2="9" y2="12" />
+        </svg>
+        Logout
+      </button>
+    </header>
 
-<div class="main" id="tab-files">
-  <div class="section">
-    <h2>File Browser</h2>
-    <div class="row">
-      <input type="text" id="filePath" value="/" class="flex-1" spellcheck="false">
-      <button class="primary" id="fileLsBtn">Open</button>
-      <button id="fileUploadBtn">Upload</button>
-      <input type="file" id="fileUploadInput" style="display:none">
-    </div>
-    <div class="file-list" id="fileList"><div class="empty-state">Open a directory</div></div>
-  </div>
-  <div class="section">
-    <h2>File Content</h2>
-    <div class="row">
-      <input type="text" id="fileReadPath" class="flex-1" placeholder="File path to read..." spellcheck="false">
-      <button id="fileReadBtn">Read</button>
-      <button id="fileSaveBtn">Save</button>
-    </div>
-    <textarea id="fileContent" rows="8" style="width:100%;margin-top:6px;font-family:'SF Mono',Menlo,monospace;font-size:11px" placeholder="Read a file to edit"></textarea>
-  </div>
-</div>
+    <div class="wrap">
+      <nav class="sidebar" id="sidebar">
+        <button class="nav-item active" data-tab="dashboard">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="3" y="3" width="7" height="7" />
+            <rect x="14" y="3" width="7" height="7" />
+            <rect x="14" y="14" width="7" height="7" />
+            <rect x="3" y="14" width="7" height="7" />
+          </svg>
+          <span class="tip">Dashboard</span>
+        </button>
+        <button class="nav-item" data-tab="remote">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
+          </svg>
+          <span class="tip">Remote</span>
+        </button>
+        <button class="nav-item" data-tab="shell">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="4 17 10 11 4 5" />
+            <line x1="12" y1="19" x2="20" y2="19" />
+          </svg>
+          <span class="tip">Shell</span>
+        </button>
+        <button class="nav-item" data-tab="files">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"
+            />
+          </svg>
+          <span class="tip">Files</span>
+        </button>
+        <button class="nav-item" data-tab="shortcuts">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+          <span class="tip">Shortcuts</span>
+        </button>
+      </nav>
 
-<div class="main" id="tab-shortcuts">
-  <div class="section">
-    <h2>Add Shortcut</h2>
-    <div class="row">
-      <input type="text" id="scName" placeholder="Label" style="width:90px">
-      <button class="primary" id="scAddBtn">Add</button>
-    </div>
-    <div class="row" style="margin-top:6px">
-      <div style="display:flex;gap:3px;flex-wrap:wrap">
-        <button class="mod-btn" data-mod="ctrl">Ctrl</button>
-        <button class="mod-btn" data-mod="alt">Alt</button>
-        <button class="mod-btn" data-mod="shift">Shift</button>
-        <button class="mod-btn" data-mod="meta">Cmd</button>
+      <div class="main active" id="tab-dashboard">
+        <div class="section">
+          <h2>System</h2>
+          <div class="dash-grid" id="dashGrid">
+            <div class="dash-card">
+              <div class="lbl">Hostname</div>
+              <div class="val" id="dHostname">—</div>
+            </div>
+            <div class="dash-card">
+              <div class="lbl">OS</div>
+              <div class="val" id="dOS">—</div>
+            </div>
+            <div class="dash-card">
+              <div class="lbl">Uptime</div>
+              <div class="val" id="dUptime">—</div>
+            </div>
+            <div class="dash-card">
+              <div class="lbl">Shell</div>
+              <div class="val" id="dShell">—</div>
+            </div>
+            <div class="dash-card">
+              <div class="lbl">Home</div>
+              <div class="val" id="dHome">—</div>
+            </div>
+            <div class="dash-card">
+              <div class="lbl">Desktop</div>
+              <div class="val" id="dDesktop">—</div>
+            </div>
+          </div>
+        </div>
+        <div class="section">
+          <h2>Quick Actions</h2>
+          <div class="row">
+            <button class="primary" id="qaExec">exec uname -a</button>
+            <button class="primary icon-btn" id="qaScreenshot">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"
+                />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+              Screenshot
+            </button>
+          </div>
+        </div>
+        <div class="section" id="dashScreenshotSection" style="display: none">
+          <h2>Screenshot</h2>
+          <div class="screenshot-wrap" id="dashShotWrap">
+            <span class="placeholder">Click button to capture</span
+            ><canvas id="dashShotCanvas" style="display: none"></canvas>
+          </div>
+        </div>
       </div>
-      <input type="text" id="scKey" maxlength="1" style="width:28px;text-align:center;text-transform:lowercase" placeholder="K">
-      <span id="scPreview" style="font-size:11px;color:var(--text2);font-family:'SF Mono',Menlo,monospace"></span>
-    </div>
-    <div class="row" style="margin-top:4px">
-      <div style="display:flex;flex-wrap:wrap;gap:3px">
-        <button class="key-btn" data-key="space">Space</button>
-        <button class="key-btn" data-key="tab">Tab</button>
-        <button class="key-btn" data-key="enter">Enter</button>
-        <button class="key-btn" data-key="escape">Esc</button>
+
+      <div class="main" id="tab-remote">
+        <div class="section" style="display: flex; flex-direction: column">
+          <div class="row">
+            <button class="icon-btn" id="liveBtn">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <polygon points="5 3 19 12 5 21 5 3" />
+              </svg>
+              Start Live
+            </button>
+            <button class="icon-btn" id="shotBtn">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"
+                />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+              Screenshot
+            </button>
+            <span
+              id="clickPos"
+              style="font-size: 10px; color: var(--text2); margin-left: auto"
+            ></span>
+          </div>
+          <div class="screenshot-wrap" id="screenWrap">
+            <span class="placeholder" id="screenPlaceholder"
+              >Start Live or capture screenshot</span
+            ><canvas id="screenCanvas" style="display: none"></canvas>
+          </div>
+        </div>
+        <div class="section">
+          <h2>Touchpad</h2>
+          <div class="row">
+            <button id="modeToggle">Move</button>
+            <span style="font-size: 10px; color: var(--text2)"
+              >tap to click</span
+            >
+            <label>Sensitivity</label>
+            <input
+              type="range"
+              id="speedSlider"
+              min="0.5"
+              max="5"
+              step="0.1"
+              value="2"
+              style="flex: 1; max-width: 120px"
+            />
+            <span
+              id="speedLabel"
+              style="font-size: 11px; color: var(--text2); min-width: 28px"
+              >2.0x</span
+            >
+          </div>
+          <div class="touchpad" id="touchpad">
+            <span class="touchpad-hint">Drag to move - Tap to click</span>
+            <div class="touchpad-cursor" id="touchpadCursor"></div>
+          </div>
+          <div class="row" style="margin-top: 6px">
+            <label>X</label
+            ><input type="number" id="mouseX" value="500" style="width: 60px" />
+            <label>Y</label
+            ><input type="number" id="mouseY" value="300" style="width: 60px" />
+            <button class="primary" id="mouseGoBtn">Go</button>
+            <button id="clickLeft">Left</button>
+            <button id="clickRight">Right</button>
+            <button id="clickMiddle">Middle</button>
+            <button id="clickDouble">Double</button>
+          </div>
+        </div>
+        <div class="section">
+          <h2>Keyboard</h2>
+          <div class="row">
+            <input
+              type="text"
+              id="typeText"
+              class="flex-1"
+              placeholder="Type text here..."
+            />
+            <button class="primary" id="typeBtn">Type</button>
+          </div>
+          <div class="row" style="margin-top: 6px">
+            <span style="font-size: 10px; color: var(--text2)">Combos</span>
+            <div style="display: flex; flex-wrap: wrap; gap: 3px">
+              <button data-combo="ctrl+c">Ctrl+C</button>
+              <button data-combo="ctrl+v">Ctrl+V</button>
+              <button data-combo="ctrl+a">Ctrl+A</button>
+              <button data-combo="ctrl+x">Ctrl+X</button>
+              <button data-combo="ctrl+z">Ctrl+Z</button>
+              <button data-combo="enter">Enter</button>
+              <button data-combo="tab">Tab</button>
+              <button data-combo="escape">Esc</button>
+              <button data-combo="delete">Del</button>
+              <button data-combo="backspace">BS</button>
+            </div>
+          </div>
+        </div>
+        <div class="section">
+          <h2>Clipboard</h2>
+          <div class="row">
+            <button id="clipRead">Read</button>
+            <input
+              type="text"
+              id="clipText"
+              class="flex-1"
+              placeholder="Text to write..."
+            />
+            <button id="clipWrite">Write</button>
+          </div>
+          <div class="output-box" id="clipOutput"></div>
+        </div>
+      </div>
+
+      <div class="main" id="tab-shell">
+        <div
+          class="section"
+          style="
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 70px);
+          "
+        >
+          <div class="term-box" id="shellOutput">
+            <div class="term-header">
+              <span class="term-dot r"></span>
+              <span class="term-dot y"></span>
+              <span class="term-dot g"></span>
+              <span class="term-title">bash</span>
+            </div>
+            <div class="term-body" id="termBody">
+              <div class="term-input-line">
+                <div class="prompt" id="inpPrompt"></div>
+                <div style="display: flex; align-items: center; gap: 4px">
+                  <span style="color: var(--green); font-weight: 600"
+                    >-&gt;</span
+                  ><input
+                    class="term-input"
+                    id="shellCmd"
+                    spellcheck="false"
+                    autofocus
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="main" id="tab-files">
+        <div class="section">
+          <h2>File Browser</h2>
+          <div class="row">
+            <input
+              type="text"
+              id="filePath"
+              value="/"
+              class="flex-1"
+              spellcheck="false"
+            />
+            <button class="primary" id="fileLsBtn">Open</button>
+            <button id="fileUploadBtn">Upload</button>
+            <input type="file" id="fileUploadInput" style="display: none" />
+          </div>
+          <div class="file-list" id="fileList">
+            <div class="empty-state">Open a directory</div>
+          </div>
+        </div>
+        <div class="section">
+          <h2>File Content</h2>
+          <div class="row">
+            <input
+              type="text"
+              id="fileReadPath"
+              class="flex-1"
+              placeholder="File path to read..."
+              spellcheck="false"
+            />
+            <button id="fileReadBtn">Read</button>
+            <button id="fileSaveBtn">Save</button>
+          </div>
+          <textarea
+            id="fileContent"
+            rows="8"
+            style="
+              width: 100%;
+              margin-top: 6px;
+              font-family: &quot;SF Mono&quot;, Menlo, monospace;
+              font-size: 11px;
+            "
+            placeholder="Read a file to edit"
+          ></textarea>
+        </div>
+      </div>
+
+      <div class="main" id="tab-shortcuts">
+        <div class="section">
+          <h2>Add Shortcut</h2>
+          <div class="row">
+            <input
+              type="text"
+              id="scName"
+              placeholder="Label"
+              style="width: 90px"
+            />
+            <button class="primary" id="scAddBtn">Add</button>
+          </div>
+          <div class="row" style="margin-top: 6px">
+            <div style="display: flex; gap: 3px; flex-wrap: wrap">
+              <button class="mod-btn" data-mod="ctrl">Ctrl</button>
+              <button class="mod-btn" data-mod="alt">Alt</button>
+              <button class="mod-btn" data-mod="shift">Shift</button>
+              <button class="mod-btn" data-mod="meta">Cmd</button>
+            </div>
+            <input
+              type="text"
+              id="scKey"
+              maxlength="1"
+              style="width: 28px; text-align: center; text-transform: lowercase"
+              placeholder="K"
+            />
+            <span
+              id="scPreview"
+              style="
+                font-size: 11px;
+                color: var(--text2);
+                font-family: &quot;SF Mono&quot;, Menlo, monospace;
+              "
+            ></span>
+          </div>
+          <div class="row" style="margin-top: 4px">
+            <div style="display: flex; flex-wrap: wrap; gap: 3px">
+              <button class="key-btn" data-key="space">Space</button>
+              <button class="key-btn" data-key="tab">Tab</button>
+              <button class="key-btn" data-key="enter">Enter</button>
+              <button class="key-btn" data-key="escape">Esc</button>
+            </div>
+          </div>
+        </div>
+        <div class="section">
+          <h2>Saved Shortcuts</h2>
+          <div id="scList" style="max-height: 400px; overflow-y: auto">
+            <div class="empty-state">No shortcuts</div>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-  <div class="section">
-    <h2>Saved Shortcuts</h2>
-    <div id="scList" style="max-height:400px;overflow-y:auto"><div class="empty-state">No shortcuts</div></div>
-  </div>
-</div>
 
-</div>
-
-<script src="/static/app.js"></script>
-</body>
+    <script src="/static/app.js?v=3"></script>
+  </body>
 </html>
