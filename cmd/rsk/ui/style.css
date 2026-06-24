@@ -371,6 +371,39 @@ button.primary:hover {
   overflow-y: auto;
   padding: 4px 12px;
 }
+.input-wrap {
+  position: relative;
+}
+.auto-dropdown {
+  display: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+  z-index: 999;
+}
+.auto-item {
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.auto-item:last-child {
+  border-bottom: none;
+}
+.auto-item.active,
+.auto-item:hover {
+  background: var(--card-hover);
+}
+.auto-item .icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
 .prompt {
   display: inline-flex;
   align-items: center;

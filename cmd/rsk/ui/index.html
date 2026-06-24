@@ -380,18 +380,21 @@
             <div class="term-body" id="termBody">
               <div class="term-input-line">
                 <div class="prompt" id="inpPrompt"></div>
-                <div style="display: flex; align-items: center; gap: 4px">
-                  <span style="color: var(--green); font-weight: 600"
-                    >▶</span
-                  ><input
-                    class="term-input"
-                    id="shellCmd"
-                    spellcheck="false"
-                    autofocus
-                  />
+                <div class="input-wrap">
+                  <div style="display: flex; align-items: center; gap: 4px">
+                    <span style="color: var(--green); font-weight: 600"
+                      >▶</span
+                    ><input
+                      class="term-input"
+                      id="shellCmd"
+                      spellcheck="false"
+                      autofocus
+                    />
+                  </div>
                 </div>
               </div>
             </div>
+            <div class="auto-dropdown" id="autoDropdown"></div>
           </div>
         </div>
       </div>
@@ -495,6 +498,6 @@
       </div>
     </div>
 
-    <script src="/static/app.js?v=4"></script>
+    <script src="/static/app.js?v=6"></script>
   </body>
 </html>
