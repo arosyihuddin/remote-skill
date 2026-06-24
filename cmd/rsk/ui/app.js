@@ -345,7 +345,7 @@ function renderCmdLine(cmd){
   const promptLine=document.createElement('div');promptLine.className='term-line'
   promptLine.innerHTML='<div class="prompt">'+renderPromptStr()+'</div>'
   const cmdLine=document.createElement('div');cmdLine.className='term-line'
-  cmdLine.innerHTML='<span style="color:var(--green);font-weight:600">-&gt;</span> <span class="cmd">'+escapeHtml(cmd)+'</span>'
+  cmdLine.innerHTML='<span style="color:var(--green);font-weight:600">▶</span> <span class="cmd">'+escapeHtml(cmd)+'</span>'
   return[promptLine,cmdLine]
 }
 
@@ -378,11 +378,25 @@ function quote(s){return "'"+s.replace(/'/g,"'\\''")+"'"}
 
 function termLine(html,isOutput){const d=document.createElement('div');d.className='term-line'+(isOutput?' output':'');d.innerHTML=html;return d}
 
+function fileIcon(name){
+  if(name.endsWith('/')) return '<svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>'
+  var ext=name.split('.').pop().toLowerCase()
+  if(ext==='go') return '<svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>'
+  if(['sh','bash','zsh','fish'].includes(ext)) return '<svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>'
+  if(['md','txt','markdown'].includes(ext)) return '<svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+  if(['png','jpg','jpeg','gif','svg','webp','ico'].includes(ext)) return '<svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>'
+  if(['zip','tar','gz','bz2','xz','7z','rar'].includes(ext)) return '<svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/></svg>'
+  if(['db','sqlite','sqlite3'].includes(ext)) return '<svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>'
+  if(['json','yaml','yml','toml','ini','cfg','conf'].includes(ext)) return '<svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>'
+  if(ext===''||['exe','bin','AppImage'].includes(ext)) return '<svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>'
+  return '<svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+}
+
 function lsGrid(text){
   const items=text.split(/\s+/).filter(Boolean)
   const d=document.createElement('div');d.className='ls-grid'
   items.forEach(n=>{
-    const s=document.createElement('span');s.className='ls-item '+fileTypeClass(n);s.textContent=n;d.appendChild(s)
+    const s=document.createElement('span');s.className='ls-item '+fileTypeClass(n);s.innerHTML=fileIcon(n)+n;d.appendChild(s)
   })
   return d
 }

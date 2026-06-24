@@ -408,14 +408,22 @@ button.primary:hover {
   color: var(--text2);
 }
 .ls-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 2px 16px;
   padding: 1px 0px 9px 0px;
 }
 .ls-item {
   font-size: 13px;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ls-item .icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
 }
 .ls-item.dir {
   color: var(--accent);
