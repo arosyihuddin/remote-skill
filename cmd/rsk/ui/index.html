@@ -2,537 +2,229 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Remote Skill</title>
-<style>
-:root{--bg:#1c1c1e;--card:#2c2c2e;--card-hover:#3a3a3c;--border:#38383a;--text:#f5f5f7;--text-secondary:#98989d;--accent:#0a84ff;--accent-hover:#409cff;--green:#30d158;--red:#ff453a;--radius:10px}
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%}
-body{font-family:-apple-system,'Helvetica Neue','SF Pro Display',sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
-
-/* header */
-header{background:#2c2c2e;padding:8px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);-webkit-user-select:none;user-select:none;flex-shrink:0}
-.traffic{display:flex;gap:6px;align-items:center}
-.traffic span{width:10px;height:10px;border-radius:50%;display:block}
-.traffic .r{background:var(--red)}.traffic .y{background:#ffd60a}.traffic .g{background:var(--green)}
-header h1{font-size:14px;font-weight:600;letter-spacing:-0.01em;flex:1}
-.device-status{font-size:11px;padding:3px 8px;border-radius:4px;font-weight:500}
-.device-status.online{background:rgba(48,209,88,.15);color:var(--green)}
-.device-status.offline{background:rgba(255,69,58,.15);color:var(--red)}
-
-/* container */
-.container{display:flex;flex:1;overflow:hidden;gap:0}
-.left,.right{display:flex;flex-direction:column;gap:8px;overflow-y:auto}
-.left{padding:8px;width:55%}
-.right{padding:8px 8px 8px 0;width:45%}
-
-/* cards */
-.section{background:var(--card);border-radius:var(--radius);padding:10px 12px;border:1px solid var(--border)}
-.section h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);margin-bottom:8px}
-
-/* form elements */
-.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;width:100%}
-label{font-size:11px;color:var(--text-secondary);white-space:nowrap}
-input,select,button{font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit}
-input:focus,select:focus{outline:none;border-color:var(--accent)}
-input[type=number]{-moz-appearance:textfield}
-input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
-button{cursor:pointer;background:var(--card);border:1px solid var(--border);transition:all .12s;-webkit-user-select:none;user-select:none}
-button:hover{background:var(--card-hover);border-color:#555}
-button:active{transform:scale(.96)}
-button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-button.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
-.flex-1{flex:1;min-width:0}
-
-/* screenshot */
-.screenshot-wrap{position:relative;flex:1;min-height:120px;overflow:auto;border-radius:6px;background:#111;cursor:crosshair;margin-top:6px}
-.screenshot-wrap canvas{display:block}
-@media(max-width:700px){.screenshot-wrap canvas{max-width:100%;height:auto}}
-.placeholder{color:#555;font-size:12px}
-.screenshot-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.click-pos{font-size:10px;color:var(--text-secondary);margin-left:auto}
-.output-box{background:#111;border-radius:6px;padding:8px;font-family:'SF Mono',Menlo,monospace;font-size:11px;max-height:150px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;min-height:30px;margin-top:6px;line-height:1.4}
-
-/* touchpad */
-.touchpad{position:relative;width:100%;height:180px;background:#1a1a1c;border-radius:8px;border:1px solid var(--border);touch-action:none;cursor:crosshair;overflow:hidden;user-select:none;-webkit-user-select:none;margin-top:6px}
-.touchpad-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:11px;color:#555;pointer-events:none;text-align:center;line-height:1.4;pointer-events:none}
-.touchpad-cursor{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--accent);opacity:0;pointer-events:none;transform:translate(-50%,-50%);transition:opacity .1s,background .2s}
-.touchpad.active .touchpad-cursor{opacity:.7}
-.touchpad-cursor.scroll{background:var(--red)}
-#modeToggle.active{background:var(--red);border-color:var(--red);color:#fff}
-.sc-item{display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--border)}
-.sc-item:last-child{border-bottom:none}
-.sc-name{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sc-combo{font-family:'SF Mono',Menlo,monospace;font-size:11px;background:var(--bg);padding:2px 6px;border-radius:4px;color:var(--accent)}
-.sc-item button{font-size:11px;padding:2px 6px;min-width:auto}
-.sc-item .sc-del{color:var(--red);background:none;border:none;cursor:pointer;font-size:14px;padding:0 4px;line-height:1}
-.sc-item .sc-run{padding:2px 8px}
-.mod-btns{display:flex;gap:3px;flex-wrap:wrap}
-.mod-btn{font-size:10px;padding:3px 6px;border-radius:4px;transition:all .12s}
-.mod-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-.sc-preview{font-size:11px;color:var(--text-secondary);font-family:'SF Mono',Menlo,monospace;white-space:nowrap}
-.key-btn{font-size:10px;padding:3px 6px;border-radius:4px}
-.key-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:4px;background:var(--border);border-radius:2px;border:none;padding:0;min-height:auto}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;border:none}
-input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;border:none}
-.key-btns{display:flex;flex-wrap:wrap;gap:3px}
-.key-btns button{font-size:10px;padding:2px 6px;border-radius:4px}
-
-/* ⇄ tablet */
-@media(max-width:1000px){
-.left,.right{width:50%}
-.right{padding:8px}
-}
-
-/* ⇄ mobile */
-@media(max-width:700px){
-.container{flex-direction:column;overflow-y:auto}
-.left,.right{width:100%;overflow-y:visible}
-.left{padding:8px 8px 0 8px}
-.right{padding:8px}
-header h1{font-size:13px}
-.traffic span{width:8px;height:8px}
-input,select,button{font-size:13px;padding:7px 10px;min-height:36px}
-.section{padding:10px}
-.key-btns button,.mod-btn,.key-btn{font-size:11px;padding:4px 8px}
-
-.screenshot-wrap{min-height:80px}
-.output-box{max-height:100px;font-size:12px}
-}
-</style>
+<link href="/static/style.css" rel="stylesheet">
 </head>
 <body>
+
+<div id="loginOverlay">
+  <div id="loginBox">
+    <h1>Remote Skill</h1>
+    <p>Enter password to access dashboard</p>
+    <div class="pw-wrap">
+      <input type="password" id="loginToken" placeholder="password" autocomplete="off">
+      <button class="eye" id="pwEye">
+        <svg class="eye-open" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <svg class="eye-off" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+      </button>
+    </div>
+    <button class="primary" id="loginBtn">Unlock</button>
+    <div id="loginError"></div>
+  </div>
+</div>
 
 <header>
   <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
   <h1>Remote Skill</h1>
-  <span class="device-status offline" id="statusBadge">disconnected</span>
+  <select id="deviceSelector"><option value="">— no devices —</option></select>
+  <button id="logoutBtn">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    Logout
+  </button>
 </header>
 
-<div class="container">
+<div class="wrap">
 
-<!-- LEFT -->
-<div class="left">
-  <div class="section" style="flex:1;display:flex;flex-direction:column;min-height:0">
-    <div class="screenshot-controls">
-      <button id="liveBtn">▶ Start Live</button>
-      <span id="clickPos" class="click-pos"></span>
+<nav class="sidebar" id="sidebar">
+  <button class="nav-item active" data-tab="dashboard">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+    <span class="tip">Dashboard</span>
+  </button>
+  <button class="nav-item" data-tab="remote">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+    <span class="tip">Remote</span>
+  </button>
+  <button class="nav-item" data-tab="shell">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+    <span class="tip">Shell</span>
+  </button>
+  <button class="nav-item" data-tab="files">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+    <span class="tip">Files</span>
+  </button>
+  <button class="nav-item" data-tab="shortcuts">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+    <span class="tip">Shortcuts</span>
+  </button>
+</nav>
+
+<div class="main active" id="tab-dashboard">
+  <div class="section">
+    <h2>System</h2>
+    <div class="dash-grid" id="dashGrid">
+      <div class="dash-card"><div class="lbl">Hostname</div><div class="val" id="dHostname">—</div></div>
+      <div class="dash-card"><div class="lbl">OS</div><div class="val" id="dOS">—</div></div>
+      <div class="dash-card"><div class="lbl">Uptime</div><div class="val" id="dUptime">—</div></div>
+      <div class="dash-card"><div class="lbl">Shell</div><div class="val" id="dShell">—</div></div>
+      <div class="dash-card"><div class="lbl">Home</div><div class="val" id="dHome">—</div></div>
+      <div class="dash-card"><div class="lbl">Desktop</div><div class="val" id="dDesktop">—</div></div>
     </div>
-    <div class="screenshot-wrap" id="screenshotWrap">
-      <span class="placeholder" id="screenshotPlaceholder">Start Live to view screen</span>
-      <canvas id="screenCanvas" style="display:none"></canvas>
+  </div>
+  <div class="section">
+    <h2>Quick Actions</h2>
+    <div class="row">
+      <button class="primary" id="qaExec">exec uname -a</button>
+      <button class="primary icon-btn" id="qaScreenshot">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Screenshot
+      </button>
     </div>
+  </div>
+  <div class="section" id="dashScreenshotSection" style="display:none">
+    <h2>Screenshot</h2>
+    <div class="screenshot-wrap" id="dashShotWrap"><span class="placeholder">Click button to capture</span><canvas id="dashShotCanvas" style="display:none"></canvas></div>
   </div>
 </div>
 
-<!-- RIGHT -->
-<div class="right">
-
-  <!-- Touchpad -->
-  <div class="section">
-    <h2>🖱 Touchpad</h2>
+<div class="main" id="tab-remote">
+  <div class="section" style="display:flex;flex-direction:column">
     <div class="row">
-      <button id="modeToggle">🖱 Move</button>
-      <span style="font-size:10px;color:var(--text-secondary)">↓ tap to click</span>
+      <button class="icon-btn" id="liveBtn">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Start Live
+      </button>
+      <button class="icon-btn" id="shotBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Screenshot
+      </button>
+      <span id="clickPos" style="font-size:10px;color:var(--text2);margin-left:auto"></span>
     </div>
-    <div class="touchpad" id="touchpad">
-      <span class="touchpad-hint">Drag to move · Tap to click</span>
-      <div class="touchpad-cursor" id="touchpadCursor"></div>
+    <div class="screenshot-wrap" id="screenWrap"><span class="placeholder" id="screenPlaceholder">Start Live or capture screenshot</span><canvas id="screenCanvas" style="display:none"></canvas></div>
+  </div>
+  <div class="section">
+    <h2>Touchpad</h2>
+    <div class="row">
+      <button id="modeToggle">Move</button>
+      <span style="font-size:10px;color:var(--text2)">tap to click</span>
+      <label>Sensitivity</label>
+      <input type="range" id="speedSlider" min="0.5" max="5" step="0.1" value="2" style="flex:1;max-width:120px">
+      <span id="speedLabel" style="font-size:11px;color:var(--text2);min-width:28px">2.0x</span>
     </div>
+    <div class="touchpad" id="touchpad"><span class="touchpad-hint">Drag to move - Tap to click</span><div class="touchpad-cursor" id="touchpadCursor"></div></div>
     <div class="row" style="margin-top:6px">
-      <label style="font-size:10px;color:var(--text-secondary);min-width:auto">Sensitivity</label>
-      <input type="range" id="speedSlider" min="0.5" max="5" step="0.1" value="2">
-      <span id="speedLabel" style="font-size:11px;color:var(--text-secondary);min-width:28px">2.0×</span>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <label>X</label><input type="number" id="mouseX" value="500" style="width:64px">
-      <label>Y</label><input type="number" id="mouseY" value="300" style="width:64px">
-      <label>Mon</label>
-      <select id="mouseMonitor" style="width:56px"><option value="">All</option></select>
+      <label>X</label><input type="number" id="mouseX" value="500" style="width:60px">
+      <label>Y</label><input type="number" id="mouseY" value="300" style="width:60px">
       <button class="primary" id="mouseGoBtn">Go</button>
-    </div>
-    <div class="row" style="margin-top:6px">
       <button id="clickLeft">Left</button>
       <button id="clickRight">Right</button>
       <button id="clickMiddle">Middle</button>
       <button id="clickDouble">Double</button>
     </div>
   </div>
-
-  <!-- Keyboard -->
   <div class="section">
-    <h2>⌨ Keyboard</h2>
+    <h2>Keyboard</h2>
     <div class="row">
-      <input type="text" id="typeText" class="flex-1" placeholder="Type text here…">
+      <input type="text" id="typeText" class="flex-1" placeholder="Type text here...">
       <button class="primary" id="typeBtn">Type</button>
     </div>
     <div class="row" style="margin-top:6px">
-      <span style="font-size:10px;color:var(--text-secondary)">Combos</span>
-      <div class="key-btns">
-        <button data-combo="ctrl+c">⌃C</button>
-        <button data-combo="ctrl+v">⌃V</button>
-        <button data-combo="ctrl+a">⌃A</button>
-        <button data-combo="ctrl+x">⌃X</button>
-        <button data-combo="ctrl+z">⌃Z</button>
-        <button data-combo="enter">⏎</button>
-        <button data-combo="tab">⇥</button>
-        <button data-combo="escape">⎋</button>
-        <button data-combo="delete">⌫</button>
-        <button data-combo="backspace">←</button>
+      <span style="font-size:10px;color:var(--text2)">Combos</span>
+      <div style="display:flex;flex-wrap:wrap;gap:3px">
+        <button data-combo="ctrl+c">Ctrl+C</button>
+        <button data-combo="ctrl+v">Ctrl+V</button>
+        <button data-combo="ctrl+a">Ctrl+A</button>
+        <button data-combo="ctrl+x">Ctrl+X</button>
+        <button data-combo="ctrl+z">Ctrl+Z</button>
+        <button data-combo="enter">Enter</button>
+        <button data-combo="tab">Tab</button>
+        <button data-combo="escape">Esc</button>
+        <button data-combo="delete">Del</button>
+        <button data-combo="backspace">BS</button>
       </div>
     </div>
   </div>
-
-  <!-- Clipboard -->
   <div class="section">
-    <h2>📋 Clipboard</h2>
+    <h2>Clipboard</h2>
     <div class="row">
       <button id="clipRead">Read</button>
-      <input type="text" id="clipText" class="flex-1" placeholder="Text to write…">
+      <input type="text" id="clipText" class="flex-1" placeholder="Text to write...">
       <button id="clipWrite">Write</button>
     </div>
     <div class="output-box" id="clipOutput"></div>
   </div>
+</div>
 
-  <!-- Shell -->
-  <div class="section">
-    <h2>💻 Shell</h2>
-    <div class="row">
-      <input type="text" id="shellCmd" class="flex-1" placeholder="$ command" spellcheck="false">
-      <button class="primary" id="shellBtn">Run</button>
-      <button id="shellClear">Clear</button>
+<div class="main" id="tab-shell">
+  <div class="section" style="padding:0;overflow:hidden;display:flex;flex-direction:column;height:calc(100vh - 70px)">
+    <div class="term-box" id="shellOutput">
+      <div class="term-header">
+        <span class="term-dot r"></span>
+        <span class="term-dot y"></span>
+        <span class="term-dot g"></span>
+        <span class="term-title">bash</span>
+      </div>
+      <div class="term-body" id="termBody"><div class="term-input-line"><span class="prompt">$</span><input class="term-input" id="shellCmd" spellcheck="false" autofocus></div></div>
     </div>
-    <div class="output-box" id="shellOutput"></div>
   </div>
+</div>
 
-  <!-- Shortcuts -->
+<div class="main" id="tab-files">
   <div class="section">
-    <h2>⚡ Shortcuts</h2>
+    <h2>File Browser</h2>
     <div class="row">
-      <input type="text" id="scName" style="width:90px" placeholder="Label">
+      <input type="text" id="filePath" value="/" class="flex-1" spellcheck="false">
+      <button class="primary" id="fileLsBtn">Open</button>
+      <button id="fileUploadBtn">Upload</button>
+      <input type="file" id="fileUploadInput" style="display:none">
+    </div>
+    <div class="file-list" id="fileList"><div class="empty-state">Open a directory</div></div>
+  </div>
+  <div class="section">
+    <h2>File Content</h2>
+    <div class="row">
+      <input type="text" id="fileReadPath" class="flex-1" placeholder="File path to read..." spellcheck="false">
+      <button id="fileReadBtn">Read</button>
+      <button id="fileSaveBtn">Save</button>
+    </div>
+    <textarea id="fileContent" rows="8" style="width:100%;margin-top:6px;font-family:'SF Mono',Menlo,monospace;font-size:11px" placeholder="Read a file to edit"></textarea>
+  </div>
+</div>
+
+<div class="main" id="tab-shortcuts">
+  <div class="section">
+    <h2>Add Shortcut</h2>
+    <div class="row">
+      <input type="text" id="scName" placeholder="Label" style="width:90px">
       <button class="primary" id="scAddBtn">Add</button>
     </div>
     <div class="row" style="margin-top:6px">
-      <div class="mod-btns">
-        <button class="mod-btn" data-mod="ctrl">⌃ Ctrl</button>
-        <button class="mod-btn" data-mod="alt">⌥ Alt</button>
-        <button class="mod-btn" data-mod="shift">⇧ Shift</button>
-        <button class="mod-btn" data-mod="meta">⌘ Cmd</button>
+      <div style="display:flex;gap:3px;flex-wrap:wrap">
+        <button class="mod-btn" data-mod="ctrl">Ctrl</button>
+        <button class="mod-btn" data-mod="alt">Alt</button>
+        <button class="mod-btn" data-mod="shift">Shift</button>
+        <button class="mod-btn" data-mod="meta">Cmd</button>
       </div>
       <input type="text" id="scKey" maxlength="1" style="width:28px;text-align:center;text-transform:lowercase" placeholder="K">
-      <span id="scPreview" class="sc-preview"></span>
+      <span id="scPreview" style="font-size:11px;color:var(--text2);font-family:'SF Mono',Menlo,monospace"></span>
     </div>
     <div class="row" style="margin-top:4px">
-      <div class="mod-btns">
-        <button class="key-btn" data-key="space">␣ Space</button>
-        <button class="key-btn" data-key="tab">⇥ Tab</button>
-        <button class="key-btn" data-key="enter">⏎ Enter</button>
-        <button class="key-btn" data-key="escape">⎋ Esc</button>
+      <div style="display:flex;flex-wrap:wrap;gap:3px">
+        <button class="key-btn" data-key="space">Space</button>
+        <button class="key-btn" data-key="tab">Tab</button>
+        <button class="key-btn" data-key="enter">Enter</button>
+        <button class="key-btn" data-key="escape">Esc</button>
       </div>
     </div>
-    <div id="scList" style="margin-top:6px;max-height:200px;overflow-y:auto"></div>
   </div>
+  <div class="section">
+    <h2>Saved Shortcuts</h2>
+    <div id="scList" style="max-height:400px;overflow-y:auto"><div class="empty-state">No shortcuts</div></div>
+  </div>
+</div>
 
 </div>
-</div>
 
-<script>
-const BASE=''
-
-
-async function api(method,path,body){
-  const opts={method,headers:{'Content-Type':'application/json'}}
-  if(body!==undefined) opts.body=JSON.stringify(body)
-  const r=await fetch(BASE+path,opts)
-  if(!r.ok) throw new Error(await r.text())
-  return r.json()
-}
-function $(id){return document.getElementById(id)}
-
-// --- device ---
-async function checkDevice(){
-  try{
-    const data=await api('GET','/devices')
-    const d=data.devices, mons=data.monitors||[]
-    const b=$('statusBadge')
-    if(d.length>0){
-      b.className='device-status online'
-      b.textContent='✓ '+(d[0].hostname||d[0].id)
-    }else{
-      b.className='device-status online'
-      b.textContent='✓ server'
-    }
-    const msel=$('mouseMonitor')
-    msel.innerHTML='<option value="">All</option>'
-    mons.forEach((m,i)=>{
-      msel.innerHTML+='<option value="'+i+'">'+m.name+'</option>'
-    })
-  }catch(e){$('statusBadge').className='device-status offline';$('statusBadge').textContent='no server'}
-}
-
-// --- live screen (WebSocket) ---
-let ws=null,screenData={width:0,height:0}
-
-$('liveBtn').onclick=function(){
-  if(ws){stopLive();return}
-  startLive()
-}
-
-function startLive(){
-  const proto=location.protocol==='https:'?'wss:':'ws:'
-  ws=new WebSocket(proto+'//'+location.host+'/screen.ws')
-  ws.binaryType='blob'
-  ws.onopen=()=>{
-    $('liveBtn').textContent='■ Stop Live'
-    $('screenshotPlaceholder').style.display='none'
-    $('screenCanvas').style.display='block'
-  }
-  ws.onmessage=async(e)=>{
-    try{
-      const canvas=$('screenCanvas')
-      const bitmap=await createImageBitmap(e.data)
-      screenData.width=bitmap.width;screenData.height=bitmap.height
-      canvas.width=bitmap.width;canvas.height=bitmap.height
-      const ctx=canvas.getContext('2d')
-      ctx.drawImage(bitmap,0,0)
-      bitmap.close()
-    }catch(_){}
-  }
-  ws.onclose=()=>cleanupLive()
-  ws.onerror=()=>cleanupLive()
-}
-
-function stopLive(){
-  if(ws){ws.close();ws=null}
-  cleanupLive()
-}
-
-function cleanupLive(){
-  ws=null
-  $('liveBtn').textContent='▶ Start Live'
-}
-
-// Click on canvas to move mouse
-$('screenshotWrap').onclick=function(e){
-  const canvas=$('screenCanvas')
-  if(!canvas||canvas.style.display==='none') return
-  const rect=canvas.getBoundingClientRect()
-  const scaleX=screenData.width/rect.width,scaleY=screenData.height/rect.height
-  const x=Math.round((e.clientX-rect.left)*scaleX)
-  const y=Math.round((e.clientY-rect.top)*scaleY)
-  $('clickPos').textContent=x+','+y
-  $('mouseX').value=x;$('mouseY').value=y
-  api('POST','/mouse',{x,y}).catch(console.error)
-}
-
-// --- mouse ---
-$('mouseGoBtn').onclick=async function(){
-  const x=parseInt($('mouseX').value)||0,y=parseInt($('mouseY').value)||0,mon=$('mouseMonitor').value
-  const body={x,y};if(mon!=='')body.monitor=parseInt(mon)
-  try{await api('POST','/mouse',body);$('clickPos').textContent=x+','+y+' moved'}
-  catch(e){alert('Mouse failed: '+e.message)}
-}
-$('clickLeft').onclick=()=>api('POST','/click',{button:'left'}).catch(e=>alert(e.message))
-$('clickRight').onclick=()=>api('POST','/click',{button:'right'}).catch(e=>alert(e.message))
-$('clickMiddle').onclick=()=>api('POST','/click',{button:'middle'}).catch(e=>alert(e.message))
-$('clickDouble').onclick=()=>api('POST','/click',{button:'left',double:true}).catch(e=>alert(e.message))
-$('mouseX').onkeydown=e=>{if(e.key==='Enter')$('mouseGoBtn').click()}
-$('mouseY').onkeydown=e=>{if(e.key==='Enter')$('mouseGoBtn').click()}
-
-// --- touchpad ---
-const touchpad=$('touchpad'),cursor=$('touchpadCursor'),slider=$('speedSlider'),speedLabel=$('speedLabel')
-let speed=2,mode='move'
-slider.oninput=()=>{speed=parseFloat(slider.value);speedLabel.textContent=speed.toFixed(1)+'×'}
-const modeBtn=$('modeToggle')
-modeBtn.onclick=()=>{
-  mode=mode==='move'?'scroll':'move'
-  modeBtn.textContent=mode==='move'?'🖱 Move':'📜 Scroll'
-  modeBtn.className=mode==='scroll'?'active':''
-  cursor.classList.toggle('scroll',mode==='scroll')
-}
-let tp={touching:false,lastX:0,lastY:0,startX:0,startY:0,startTime:0,moved:false}
-
-function tpDown(px,py){
-  tp.touching=true;tp.moved=false;tp.lastX=px;tp.lastY=py
-  tp.startX=px;tp.startY=py;tp.startTime=Date.now()
-  touchpad.classList.add('active')
-  cursor.style.left=px+'px';cursor.style.top=py+'px'
-}
-
-function tpMove(px,py){
-  if(!tp.touching)return
-  const dx=(px-tp.lastX)*speed,dy=(py-tp.lastY)*speed
-  tp.lastX=px;tp.lastY=py
-  if(Math.abs(px-tp.startX)>4||Math.abs(py-tp.startY)>4) tp.moved=true
-  if(Math.abs(dx)>=1||Math.abs(dy)>=1){
-    cursor.style.left=px+'px';cursor.style.top=py+'px'
-    if(mode==='move'){
-      api('POST','/mouse',{x:Math.round(dx),y:Math.round(dy),relative:true}).catch(()=>{})
-    }else{
-      api('POST','/scroll',{dy:Math.round(dy)}).catch(()=>{})
-    }
-  }
-}
-
-function tpUp(e){
-  if(!tp.touching)return
-  const wasTap=!tp.moved&&(Date.now()-tp.startTime)<500
-  tp.touching=false;touchpad.classList.remove('active')
-  if(wasTap) api('POST','/click',{button:'left'}).catch(()=>{})
-}
-
-touchpad.onmousedown=e=>{tpDown(e.clientX-touchpad.getBoundingClientRect().left,e.clientY-touchpad.getBoundingClientRect().top);e.preventDefault()}
-document.onmousemove=e=>{if(tp.touching)tpMove(e.clientX-touchpad.getBoundingClientRect().left,e.clientY-touchpad.getBoundingClientRect().top)}
-document.onmouseup=e=>{if(tp.touching)tpUp(e)}
-touchpad.ontouchstart=e=>{const r=touchpad.getBoundingClientRect();tpDown(e.touches[0].clientX-r.left,e.touches[0].clientY-r.top);e.preventDefault()}
-touchpad.ontouchmove=e=>{const r=touchpad.getBoundingClientRect();tpMove(e.touches[0].clientX-r.left,e.touches[0].clientY-r.top);e.preventDefault()}
-touchpad.ontouchend=e=>{tpUp(e)}
-
-let scrollAccum=0
-touchpad.onwheel=e=>{
-  scrollAccum+=e.deltaY
-  if(Math.abs(scrollAccum)>=5){
-    const amt=Math.round(scrollAccum)
-    api('POST','/scroll',{dy:amt}).catch(()=>{})
-    scrollAccum-=amt
-  }
-  e.preventDefault()
-}
-
-// --- keyboard ---
-$('typeBtn').onclick=async function(){
-  const text=$('typeText').value;if(!text)return
-  try{await api('POST','/type',{text})}catch(e){alert('Type failed: '+e.message)}
-}
-$('typeText').onkeydown=e=>{if(e.key==='Enter')$('typeBtn').click()}
-document.querySelectorAll('.key-btns button').forEach(btn=>{
-  btn.onclick=async function(){try{await api('POST','/key',{combo:this.dataset.combo})}catch(e){alert(e.message)}}
-})
-
-// --- clipboard ---
-$('clipRead').onclick=async function(){
-  try{const r=await api('POST','/clipboard/read',{});$('clipOutput').textContent=r.content||'(empty)'}
-  catch(e){$('clipOutput').textContent='Error: '+e.message}
-}
-$('clipWrite').onclick=async function(){
-  const text=$('clipText').value;if(!text)return
-  try{await api('POST','/clipboard/write',{content:text});$('clipOutput').textContent='✓ written'}
-  catch(e){$('clipOutput').textContent='Error: '+e.message}
-}
-
-// --- shell ---
-$('shellBtn').onclick=async function(){
-  const cmd=$('shellCmd').value.trim();if(!cmd)return
-  const out=$('shellOutput');out.textContent='$ '+cmd+'\n…'
-  try{
-    const r=await api('POST','/exec',{cmd:['sh','-c',cmd],timeout_sec:15})
-    let s='$ '+cmd+'\n';if(r.stdout)s+=r.stdout
-    if(r.stderr)s+='\n'+r.stderr;if(r.exit_code!==0)s+='\n[exit '+r.exit_code+']'
-    out.textContent=s
-  }catch(e){out.textContent='$ '+cmd+'\nError: '+e.message}
-}
-$('shellCmd').onkeydown=e=>{if(e.key==='Enter')$('shellBtn').click()}
-$('shellClear').onclick=()=>{$('shellOutput').textContent=''}
-
-// --- shortcuts ---
-const scName=$('scName'),scKey=$('scKey'),scAdd=$('scAddBtn'),scList=$('scList'),scPreview=$('scPreview'),scModBtns=document.querySelectorAll('.mod-btn')
-let scMods=[]
-
-scModBtns.forEach(btn=>{
-  btn.onclick=()=>{
-    const m=btn.dataset.mod
-    const idx=scMods.indexOf(m)
-    if(idx>=0){scMods.splice(idx,1)}else{scMods.push(m)}
-    btn.classList.toggle('active')
-    updatePreview()
-  }
-})
-
-scKey.oninput=()=>{
-  const v=scKey.value
-  scKey.value=v===' '||v==='\t'?' ':v.slice(-1).toLowerCase()
-  document.querySelectorAll('.key-btn').forEach(b=>b.classList.toggle('active',b.dataset.key===scKey.value))
-  updatePreview()
-}
-scKey.onkeydown=e=>{if(e.key==='Enter')scAdd.click()}
-document.querySelectorAll('.key-btn').forEach(btn=>{
-  btn.onclick=()=>{
-    scKey.value=btn.dataset.key
-    document.querySelectorAll('.key-btn').forEach(b=>b.classList.toggle('active',b.dataset.key===btn.dataset.key))
-    updatePreview()
-  }
-})
-
-function scKeyName(){
-  if(!scKey.value)return ''
-  return scKey.value===' '?'space':scKey.value
-}
-
-function updatePreview(){
-  const parts=[...scMods]
-  const kn=scKeyName()
-  if(kn) parts.push(kn)
-  scPreview.textContent=parts.join('+')
-}
-
-function displayCombo(combo){
-  if(!combo)return ''
-  const m={'ctrl':'⌃','alt':'⌥','shift':'⇧','meta':'⌘'}
-  return combo.replace(/(ctrl|alt|shift|meta)/g,(_,k)=>m[k]||k).replace('space','␣')
-}
-
-async function loadShortcuts(){
-  try{
-    const list=await api('GET','/shortcuts')
-    scList.innerHTML=list.map(s=>
-      '<div class="sc-item" data-id="'+s.id+'">'+
-        '<button class="sc-run" data-combo="'+s.combo+'">▶</button>'+
-        '<span class="sc-name">'+s.name+'</span>'+
-        '<span class="sc-combo">'+displayCombo(s.combo)+'</span>'+
-        '<button class="sc-del" data-id="'+s.id+'">×</button>'+
-      '</div>'
-    ).join('')
-  }catch(_){}
-}
-
-function getCombo(){
-  const parts=[...scMods]
-  const kn=scKeyName()
-  if(kn) parts.push(kn)
-  return parts.join('+')
-}
-
-scAdd.onclick=async()=>{
-  const name=scName.value.trim(),combo=getCombo()
-  if(!name||!combo)return
-  try{
-    await api('POST','/shortcuts',{name,combo})
-    scName.value='';scKey.value='';scMods=[]
-    scModBtns.forEach(b=>b.classList.remove('active'))
-    document.querySelectorAll('.key-btn').forEach(b=>b.classList.remove('active'))
-    scPreview.textContent=''
-    await loadShortcuts()
-  }catch(e){alert('Add shortcut failed: '+e.message)}
-}
-scName.onkeydown=e=>{if(e.key==='Enter')scAdd.click()}
-
-scList.onclick=async e=>{
-  const btn=e.target.closest('button')
-  if(!btn)return
-  if(btn.classList.contains('sc-del')){
-    const id=btn.dataset.id
-    try{await fetch('/shortcuts/'+id,{method:'DELETE'});await loadShortcuts()}
-    catch(err){alert('Delete failed: '+err.message)}
-  }else if(btn.classList.contains('sc-run')){
-    try{await api('POST','/key',{combo:btn.dataset.combo})}
-    catch(err){alert('Run shortcut failed: '+err.message)}
-  }
-}
-
-// --- init ---
-checkDevice();setInterval(checkDevice,5000)
-loadShortcuts()
-</script>
+<script src="/static/app.js"></script>
 </body>
 </html>

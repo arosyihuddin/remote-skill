@@ -24,16 +24,14 @@
 
 ## Quick Start
 
-**Two machines, five commands.**
+**Two machines, one-liner each.**
 
 ```bash
 # ── server (VPS) ──────────────────────────────────────
-wget https://github.com/arosyihuddin/remote-skill/releases/latest/download/rsk-linux-amd64 -O rsk
-chmod +x rsk && ./rsk setup
+curl -fsSL https://raw.githubusercontent.com/arosyihuddin/remote-skill/main/install.sh | bash -s -- server
 
 # ── laptop (node) ─────────────────────────────────────
-wget https://github.com/arosyihuddin/remote-skill/releases/latest/download/rsk-node-linux-amd64 -O rsk-node
-chmod +x rsk-node && ./rsk-node setup
+curl -fsSL https://raw.githubusercontent.com/arosyihuddin/remote-skill/main/install.sh | bash -s -- node --server ws://<vps-ip>:7777/agent
 ```
 
 Both run as systemd user services. Done.
@@ -161,20 +159,34 @@ rsk desktop-home screenshot --save ~/shot.png
 
 ## Installation
 
-### Option 1: Binary download (recommended)
-
-Download the latest release binary. No Go toolchain needed.
+### Option 1: One-liner install (recommended)
 
 ```bash
-# Find the latest version:
-# https://github.com/arosyihuddin/remote-skill/releases
+# Server
+curl -fsSL https://raw.githubusercontent.com/arosyihuddin/remote-skill/main/install.sh | bash -s -- server
 
+# Node
+curl -fsSL https://raw.githubusercontent.com/arosyihuddin/remote-skill/main/install.sh | bash -s -- node --server ws://<vps-ip>:7777/agent
+```
+
+Downloads the correct binary for your OS/arch and runs `setup` automatically.
+
+### Option 2: Manual binary download
+
+```bash
 wget https://github.com/arosyihuddin/remote-skill/releases/latest/download/rsk-linux-amd64 -O rsk
 wget https://github.com/arosyihuddin/remote-skill/releases/latest/download/rsk-node-linux-amd64 -O rsk-node
 chmod +x rsk rsk-node
 ```
 
-### Option 2: Build from source
+Dashboard password diatur via `UI_PASSWORD` di config atau `RSK_UI_PASSWORD` env. Default: sama dengan `TOKEN`.
+
+```bash
+# Contoh: set password dashboard
+RSK_UI_PASSWORD=admin123 rsk daemon
+```
+
+### Option 3: Build from source
 
 ```bash
 git clone https://github.com/arosyihuddin/remote-skill.git
@@ -241,7 +253,7 @@ https://raw.githubusercontent.com/arosyihuddin/remote-skill/main/INSTALL.md
 
 - **Single shared token** authenticates nodes, CLI clients, and HTTP monitor.
 - **WS broker** (`:7777`) should bind to a mesh VPN IP, not `0.0.0.0`.
-- **HTTP monitor** (`:7800`) requires `Authorization: Bearer <token>` or `?token=` query param.
+- **HTTP monitor** (`:7800`) has a login form. Use `UI_PASSWORD` or `RSK_UI_PASSWORD` to set dashboard password (default: same as `TOKEN`). API still accepts `Authorization: Bearer <token>` or `?token=` param.
 - Treat the **TOKEN** as a root credential — anyone with it can execute arbitrary commands on connected nodes.
 
 ---

@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -28,8 +29,8 @@ import (
 	"github.com/pstar7/remote-skill/internal/update"
 )
 
-//go:embed ui/index.html
-var uiHTML string
+//go:embed ui/*
+var uiFS embed.FS
 
 //go:embed rsk.service
 var serviceUnit []byte
@@ -93,6 +94,7 @@ func runSetup(args []string) {
 	agentListen := fs.String("agent", "0.0.0.0:7777", "node WS listen address")
 	monitor := fs.String("monitor", "127.0.0.1:7800", "monitoring HTTP address")
 	token := fs.String("token", "", "auth token (auto-generate if empty)")
+	uiPass := fs.String("ui-password", "", "dashboard login password (default: same as token)")
 	uninstall := fs.Bool("uninstall", false, "remove installation")
 	_ = fs.Parse(args)
 
@@ -120,6 +122,9 @@ func runSetup(args []string) {
 				}
 				if v, ok := m["TOKEN"]; ok && v != "" {
 					*token = v
+				}
+				if v, ok := m["UI_PASSWORD"]; ok && v != "" {
+					*uiPass = v
 				}
 			}
 			fmt.Println("  ℹ using existing configuration")
@@ -154,7 +159,8 @@ func runSetup(args []string) {
 	content := fmt.Sprintf(`AGENT_LISTEN=%s
 SKILL_LISTEN=%s
 TOKEN=%s
-`, *agentListen, *monitor, *token)
+UI_PASSWORD=%s
+`, *agentListen, *monitor, *token, *uiPass)
 	os.WriteFile(configPath, []byte(content), 0600)
 	fmt.Printf("  ✔ config: %s\n", configPath)
 
@@ -343,7 +349,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  rsk <command> [args...]\n")
 	fmt.Fprintf(os.Stderr, "  rsk <device-id> <command> [args...]\n")
 	fmt.Fprintf(os.Stderr, "  rsk daemon [--config PATH] [--db PATH]\n")
-	fmt.Fprintf(os.Stderr, "  rsk setup [--agent ADDR] [--monitor ADDR] [--token SECRET]\n")
+	fmt.Fprintf(os.Stderr, "  rsk setup [--agent ADDR] [--monitor ADDR] [--token SECRET] [--ui-password PASS]\n")
 	fmt.Fprintf(os.Stderr, "  rsk uninstall\n\n")
 	fmt.Fprintf(os.Stderr, "Commands:\n")
 	fmt.Fprintf(os.Stderr, "  daemon              Start the broker daemon\n")
@@ -437,7 +443,7 @@ func runDaemon(args []string) {
 
 	// Monitoring HTTP (:7800)
 	monMux := http.NewServeMux()
-	registerMonitoringRoutes(monMux, br, database, cfg.Token)
+	registerMonitoringRoutes(monMux, br, database, cfg.Token, cfg.UIPassword)
 	monSrv := &http.Server{
 		Addr:    cfg.SkillListen,
 		Handler: authMiddleware(cfg.Token, monMux),
@@ -577,12 +583,11 @@ func readReqJSON(r *http.Request, v any) error {
 
 func authMiddleware(token string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if strings.HasPrefix(auth, "Bearer ") && strings.TrimPrefix(auth, "Bearer ") == token {
+		if checkAuth(r, token) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if r.URL.Query().Get("token") == token {
+		if r.URL.Path == "/login" || r.URL.Path == "/logout" || r.URL.Path == "/" || strings.HasPrefix(r.URL.Path, "/static/") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -590,17 +595,77 @@ func authMiddleware(token string, next http.Handler) http.Handler {
 	})
 }
 
-func registerMonitoringRoutes(mux *http.ServeMux, br *broker.Broker, database *db.DB, token string) {
+func checkAuth(r *http.Request, token string) bool {
+	auth := r.Header.Get("Authorization")
+	if strings.HasPrefix(auth, "Bearer ") && strings.TrimPrefix(auth, "Bearer ") == token {
+		return true
+	}
+	if r.URL.Query().Get("token") == token {
+		return true
+	}
+	if c, err := r.Cookie("token"); err == nil && c.Value == token {
+		return true
+	}
+	return false
+}
+
+func registerMonitoringRoutes(mux *http.ServeMux, br *broker.Broker, database *db.DB, token, uiPass string) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
 		}
+		data, err := fs.ReadFile(uiFS, "ui/index.html")
+		if err != nil {
+			writeErr(w, 500, err)
+			return
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(200)
-		_, _ = w.Write([]byte(uiHTML))
+		_, _ = w.Write(data)
 	})
+	sub, _ := fs.Sub(uiFS, "ui")
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(sub))))
 
+	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, 405, fmt.Errorf("method not allowed"))
+			return
+		}
+		var body struct {
+			Token string `json:"token"`
+		}
+		if err := readReqJSON(r, &body); err != nil {
+			writeErr(w, 400, fmt.Errorf("bad json: %w", err))
+			return
+		}
+		if body.Token != uiPass {
+			writeErr(w, 401, fmt.Errorf("invalid token"))
+			return
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name:     "token",
+			Value:    token,
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteStrictMode,
+		})
+		writeJSON(w, 200, map[string]string{"status": "ok"})
+	})
+	mux.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, 405, fmt.Errorf("method not allowed"))
+			return
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name:     "token",
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			MaxAge:   -1,
+		})
+		writeJSON(w, 200, map[string]string{"status": "ok"})
+	})
 	mux.HandleFunc("/devices", func(w http.ResponseWriter, r *http.Request) {
 		monitors, _ := handlers.GetMonitors()
 		writeJSON(w, 200, struct {

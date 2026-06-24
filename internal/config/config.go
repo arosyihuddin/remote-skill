@@ -19,6 +19,9 @@ type ServerConfig struct {
 	SkillListen string
 	// Token authenticates agents (must match agent's token).
 	Token string
+	// UIPassword is the password for the web dashboard login.
+	// Defaults to Token if empty.
+	UIPassword string
 }
 
 // NodeConfig is loaded by the laptop daemon.
@@ -103,6 +106,9 @@ func LoadServerConfig(path string) (ServerConfig, error) {
 		if v, ok := m["TOKEN"]; ok {
 			c.Token = v
 		}
+		if v, ok := m["UI_PASSWORD"]; ok {
+			c.UIPassword = v
+		}
 	}
 	if v := os.Getenv("RSK_AGENT_LISTEN"); v != "" {
 		c.AgentListen = v
@@ -113,8 +119,14 @@ func LoadServerConfig(path string) (ServerConfig, error) {
 	if v := os.Getenv("RSK_TOKEN"); v != "" {
 		c.Token = v
 	}
+	if v := os.Getenv("RSK_UI_PASSWORD"); v != "" {
+		c.UIPassword = v
+	}
 	if c.Token == "" {
 		return c, fmt.Errorf("server token is empty (set TOKEN in config or RSK_TOKEN env)")
+	}
+	if c.UIPassword == "" {
+		c.UIPassword = c.Token
 	}
 	return c, nil
 }

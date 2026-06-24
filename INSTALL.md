@@ -14,7 +14,7 @@ Get the latest binary from GitHub Releases:
 ### rsk (server daemon + CLI)
 
 ```
-Usage: rsk setup [--agent ADDR] [--monitor ADDR] [--token SECRET]
+Usage: rsk setup [--agent ADDR] [--monitor ADDR] [--token SECRET] [--ui-password PASS]
 ```
 
 Installs as systemd user service (`rsk.service`).
@@ -22,6 +22,7 @@ Installs as systemd user service (`rsk.service`).
 - `--agent` — WS broker address (default: `0.0.0.0:7777`)
 - `--monitor` — HTTP monitor address (default: `127.0.0.1:7800`)
 - `--token` — Auth token. Auto-generated if empty.
+- `--ui-password` — Dashboard login password. Default: same as token.
 
 Files created:
 - Binary: `~/.local/bin/rsk`
