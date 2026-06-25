@@ -154,52 +154,6 @@ type wlrPos struct {
 	Y int `json:"y"`
 }
 
-type wlrOutput struct {
-	Name     string    `json:"name"`
-	Enabled  bool      `json:"enabled"`
-	Modes    []wlrMode `json:"modes"`
-	Position wlrPos    `json:"position"`
-}
-
-type MonitorInfo struct {
-	Name   string `json:"name"`
-	X      int    `json:"x"`
-	Y      int    `json:"y"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
-}
-
-func GetMonitors() ([]MonitorInfo, error) {
-	cmd := exec.Command("wlr-randr", "--json")
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("wlr-randr: %w", err)
-	}
-	var outputs []wlrOutput
-	if err := json.Unmarshal(out, &outputs); err != nil {
-		return nil, fmt.Errorf("wlr-randr parse: %w", err)
-	}
-	var mons []MonitorInfo
-	for _, o := range outputs {
-		if !o.Enabled {
-			continue
-		}
-		for _, m := range o.Modes {
-			if m.Current {
-				mons = append(mons, MonitorInfo{
-					Name:   o.Name,
-					X:      o.Position.X,
-					Y:      o.Position.Y,
-					Width:  m.Width,
-					Height: m.Height,
-				})
-				break
-			}
-		}
-	}
-	return mons, nil
-}
-
 func Scroll(ctx context.Context, payload json.RawMessage, _ handler.StreamWriter) (any, error) {
 	var req proto.ScrollRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
@@ -224,7 +178,7 @@ func MouseMove(ctx context.Context, payload json.RawMessage, _ handler.StreamWri
 	x, y := req.X, req.Y
 
 	if req.Monitor != nil {
-		mons, err := GetMonitors()
+		mons, err := DetectMonitors(ctx)
 		if err == nil && *req.Monitor >= 0 && *req.Monitor < len(mons) {
 			m := mons[*req.Monitor]
 			x += m.X

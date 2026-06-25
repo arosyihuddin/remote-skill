@@ -45,14 +45,14 @@ type monWlrOutput struct {
 }
 
 func Monitors(ctx context.Context, _ json.RawMessage, _ handler.StreamWriter) (any, error) {
-	mons, err := detectMonitors(ctx)
+	mons, err := DetectMonitors(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return mons, nil
 }
 
-func detectMonitors(ctx context.Context) ([]proto.MonitorInfo, error) {
+func DetectMonitors(ctx context.Context) ([]proto.MonitorInfo, error) {
 	// 1. Hyprland — hyprctl monitors -j
 	if mons, err := monitorsHyprctl(ctx); err == nil {
 		return mons, nil

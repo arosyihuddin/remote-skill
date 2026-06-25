@@ -276,7 +276,7 @@ func getMouse() (*uinputDevice, error) {
 	if mouseDev != nil {
 		return mouseDev, nil
 	}
-	if mons, err := detectMonitors(context.Background()); err == nil {
+	if mons, err := DetectMonitors(context.Background()); err == nil {
 		var maxW, maxH int
 		for _, m := range mons {
 			if m.X+m.Width > maxW {

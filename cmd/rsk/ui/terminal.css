@@ -1,0 +1,210 @@
+/* terminal */
+.term-box {
+  background: #0d0d0d;
+  border-radius: var(--radius);
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.term-box .prompt {
+  color: var(--green);
+}
+.term-box .error {
+  color: var(--red);
+}
+.term-box .cmd {
+  color: var(--text);
+}
+.term-line {
+  padding: 1px 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 13px;
+  line-height: 20px;
+}
+.term-line .prompt {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.term-line.output {
+  padding-left: 18px;
+}
+.term-input-line {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.term-input-line .prompt {
+  flex-shrink: 0;
+  min-width: 14px;
+}
+.term-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 20px;
+  height: 20px;
+  outline: none;
+  padding: 4px;
+  caret-color: var(--accent);
+}
+.term-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #0d0d0d;
+  border-bottom: 1px solid #222;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.term-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.term-dot.r {
+  background: var(--red);
+}
+.term-dot.y {
+  background: var(--orange);
+}
+.term-dot.g {
+  background: var(--green);
+}
+.term-title {
+  font-size: 11px;
+  color: var(--text2);
+  margin-left: 4px;
+  font-weight: 500;
+}
+.term-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 12px;
+}
+.input-wrap {
+  position: relative;
+}
+.auto-dropdown {
+  display: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+  z-index: 999;
+}
+.auto-item {
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.auto-item:last-child {
+  border-bottom: none;
+}
+.auto-item.active,
+.auto-item:hover {
+  background: var(--card-hover);
+}
+.auto-item .icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+.prompt {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.prompt-seg {
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.prompt-seg.usr {
+  background: var(--accent);
+  border-radius: 6px 0 0 6px;
+  color: #fff;
+}
+.prompt-seg.dir {
+  background: #333;
+  color: var(--text);
+}
+.prompt-seg.git {
+  background: #444;
+  color: var(--orange);
+}
+.prompt-seg.time {
+  background: var(--card-hover);
+  border-radius: 0 6px 6px 0;
+  color: var(--text2);
+}
+.ls-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 2px 16px;
+  padding: 1px 0px 9px 0px;
+}
+.ls-item {
+  font-size: 13px;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ls-item .icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+.ls-item.dir {
+  color: var(--accent);
+}
+.ls-item.go {
+  color: var(--green);
+}
+.ls-item.sh {
+  color: var(--orange);
+}
+.ls-item.md {
+  color: var(--text2);
+}
+.ls-item.img {
+  color: #ff6b6b;
+}
+.ls-item.zip {
+  color: #ff9f0a;
+}
+.ls-item.db {
+  color: #64d2ff;
+}
+.ls-item.cfg {
+  color: #aaa;
+}
+.ls-item.exe {
+  color: #30d158;
+}
+.ls-item.audio {
+  color: #f472b6;
+}
+.ls-item.video {
+  color: #ef4444;
+}
