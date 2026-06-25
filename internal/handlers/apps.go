@@ -85,6 +85,19 @@ func LaunchApp(ctx context.Context, raw json.RawMessage, _ handler.StreamWriter)
 		return nil, fmt.Errorf("app %q not found", req.Name)
 	}
 
+	// Try gio launch first (proper desktop entry launch, opens new window)
+	if _, err := exec.LookPath("gio"); err == nil {
+		args := []string{"launch", app.Path}
+		args = append(args, req.Args...)
+		cmd := exec.CommandContext(ctx, "gio", args...)
+		cmd.Env = append(os.Environ(), "DISPLAY="+os.Getenv("DISPLAY"), "WAYLAND_DISPLAY="+os.Getenv("WAYLAND_DISPLAY"))
+		if err := cmd.Start(); err == nil {
+			go cmd.Wait()
+			return proto.EmptyResult{OK: true}, nil
+		}
+	}
+
+	// Fallback: sh -c execLine
 	execLine := parseExecLine(app.Exec, req.Args)
 	cmd := exec.CommandContext(ctx, "sh", "-c", execLine)
 	cmd.Stdin = os.Stdin
@@ -100,6 +113,7 @@ func LaunchApp(ctx context.Context, raw json.RawMessage, _ handler.StreamWriter)
 }
 
 type desktopEntry struct {
+	Path       string
 	Name       string
 	Exec       string
 	Icon       string
@@ -156,6 +170,7 @@ func parseDesktopFile(path string) *desktopEntry {
 	defer f.Close()
 
 	var e desktopEntry
+	e.Path = path
 	inDesktop := false
 	sc := bufio.NewScanner(f)
 

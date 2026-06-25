@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Remote Skill</title>
-    <link href="/static/style.css?v=9" rel="stylesheet" />
+    <link href="/static/style.css?v=11" rel="stylesheet" />
   </head>
   <body>
     <div id="loginOverlay">
@@ -202,34 +202,23 @@
           </div>
         </div>
         <div class="section">
-          <h2>Quick Actions</h2>
-          <div class="row">
-            <button class="primary" id="qaExec">exec uname -a</button>
-            <button class="primary icon-btn" id="qaScreenshot">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path
-                  d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"
-                />
-                <circle cx="12" cy="13" r="4" />
-              </svg>
-              Screenshot
-            </button>
+          <h2>Running Apps</h2>
+          <div id="activeAppsGrid">
+            <div class="empty-state">No apps running</div>
           </div>
         </div>
-        <div class="section" id="dashScreenshotSection" style="display: none">
-          <h2>Screenshot</h2>
-          <div class="screenshot-wrap" id="dashShotWrap">
-            <span class="placeholder">Click button to capture</span
-            ><canvas id="dashShotCanvas" style="display: none"></canvas>
+        <div class="section">
+          <h2>Apps</h2>
+          <div class="row">
+            <input
+              type="text"
+              id="appsSearch"
+              class="flex-1"
+              placeholder="Search apps..."
+            />
+          </div>
+          <div class="app-grid" id="appsGrid">
+            <div class="empty-state">Loading...</div>
           </div>
         </div>
       </div>
@@ -507,7 +496,7 @@
         </div>
       </div>
     </div>
-    <script src="/static/app.js?v=15"></script>
+    <script src="/static/app.js?v=19"></script>
     <script src="/static/files.js?v=2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   </body>

@@ -114,29 +114,8 @@ function updateDashboard(){
       $('dDesktop').textContent=p[5]||'—'
     }
   }).catch(()=>{})
-}
-$('qaExec').onclick=function(){
-  api('POST','/exec',{cmd:['sh','-c','uname -a'],timeout_sec:5}).then(r=>{
-    const p=$('dashShotWrap').querySelector('.placeholder')
-    if(r.stdout) p.textContent=r.stdout;else p.textContent='(no output)'
-    p.style.display='block';$('dashShotCanvas').style.display='none'
-  }).catch(e=>{$('dashShotWrap').querySelector('.placeholder').textContent='Error: '+e.message})
-  $('dashScreenshotSection').style.display='block'
-  $('dashShotWrap').querySelector('.placeholder').style.display='block'
-  $('dashShotCanvas').style.display='none'
-}
-$('qaScreenshot').onclick=function(){
-  api('POST','/screenshot',{}).then(r=>{
-    $('dashScreenshotSection').style.display='block'
-    const p=$('dashShotWrap').querySelector('.placeholder')
-    const c=$('dashShotCanvas')
-    if(r.base64){
-      p.style.display='none';c.style.display='block'
-      const img=new Image()
-      img.onload=function(){c.width=img.width;c.height=img.height;c.getContext('2d').drawImage(img,0,0);img.remove()}
-      img.src='data:image/png;base64,'+r.base64
-    }else{p.style.display='block';c.style.display='none';p.textContent='(no image data)'}
-  }).catch(e=>{const p=$('dashShotWrap').querySelector('.placeholder');p.style.display='block';$('dashShotCanvas').style.display='none';p.textContent='Error: '+e.message})
+  if(!$('appsGrid').dataset.loaded){loadApps();$('appsGrid').dataset.loaded='1'}
+  loadActiveApps()
 }
 
 /* --- remote: live screen --- */
@@ -602,7 +581,71 @@ function escapeHtml(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/</
 function escapeAttr(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function escapeRegex(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
 
+/* --- apps --- */
+function loadApps(filter){
+  const grid=$('appsGrid')
+  grid.innerHTML='<div class="empty-state">Loading...</div>'
+  api('POST','/apps',{filter:filter||''}).then(r=>{
+    if(!r.apps||!r.apps.length){grid.innerHTML='<div class="empty-state">No apps found</div>';return}
+    r.apps.sort((a,b)=>a.name.localeCompare(b.name))
+    var html=''
+    r.apps.forEach((app,i)=>{
+      const letter=(app.name||'?')[0].toUpperCase()
+      const delay=Math.min(i*0.02,0.5)
+      html+='<div class="app-item" style="animation-delay:'+delay+'s" data-name="'+escapeAttr(app.name)+'">'
+        +'<div class="app-icon">'+escapeHtml(letter)+'</div>'
+        +'<div class="app-name">'+escapeHtml(app.name)+'</div>'
+        +(app.comment?'<div class="app-comment">'+escapeHtml(app.comment)+'</div>':'')
+        +'</div>'
+    })
+    grid.innerHTML=html
+    grid.querySelectorAll('.app-item').forEach(el=>{
+      el.onclick=function(){
+        const name=this.dataset.name
+        api('POST','/apps/launch',{name:name})
+          .then(()=>{showToast('Launched: '+name,'success');setTimeout(loadActiveApps,1000)})
+          .catch(e=>showToast('Launch error: '+e.message,'error'))
+      }
+    })
+  }).catch(e=>{grid.innerHTML='<div class="empty-state">Error: '+escapeHtml(e.message)+'</div>'})
+}
+$('appsSearch').oninput=function(){clearTimeout(this._debounce);this._debounce=setTimeout(()=>loadApps(this.value.trim()),300)}
+
+/* --- active apps (via windows) --- */
+var _lastActiveAppsJSON=''
+var _activeAppsAnim=true
+function loadActiveApps(anim){
+  if(anim===undefined) anim=_activeAppsAnim
+  _activeAppsAnim=false
+  const grid=$('activeAppsGrid')
+  if(!grid) return
+  api('POST','/windows',{}).then(r=>{
+    const wins=Array.isArray(r)?r:(r.windows||[])
+    const json=JSON.stringify(wins)
+    if(json===_lastActiveAppsJSON) return
+    _lastActiveAppsJSON=json
+    if(!wins.length){grid.innerHTML='<div class="empty-state">No windows open</div>';return}
+    var html=''
+    wins.forEach(w=>{
+      const name=w.app||w.title||'Unknown'
+      const letter=(name)[0].toUpperCase()
+      html+='<div class="active-app-item'+(w.active?' active':'')+(anim?'':' no-anim')+'" data-pid="'+(w.pid||0)+'">'
+        +'<div class="active-app-icon">'+escapeHtml(letter)+'</div>'
+        +'<div class="active-app-info">'
+        +'<div class="active-app-name">'+escapeHtml(name)+'</div>'
+        +'<div class="active-app-detail">'+escapeHtml(w.title||'')+'</div>'
+        +'</div>'
+        +(w.pid?'<button class="active-app-close" onclick="closeApp('+w.pid+')">&times;</button>':'')
+        +'</div>'
+    })
+    grid.innerHTML=html
+  }).catch(()=>{})
+}
+function closeApp(pid){
+  api('POST','/exec',{cmd:['sh','-c','kill '+pid],timeout_sec:5}).then(()=>{loadActiveApps()}).catch(e=>showToast('Close error: '+e.message,'error'))
+}
 
 /* --- init --- */
 checkAuth()
 setInterval(function(){if(authenticated)fetch(BASE+'/devices').then(r=>r.json()).then(onDevices).catch(()=>{})},3000)
+setInterval(function(){if(authenticated&&deviceId)loadActiveApps()},5000)
