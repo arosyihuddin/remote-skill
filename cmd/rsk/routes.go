@@ -145,6 +145,7 @@ func registerMonitoringRoutes(mux *http.ServeMux, br *broker.Broker, database *d
 	mux.HandleFunc("/clipboard/write", handleCall(br, proto.TypeClipboardWrite, func() any { return &proto.ClipboardWriteRequest{} }))
 	mux.HandleFunc("/scroll", handleCall(br, proto.TypeScroll, func() any { return &proto.ScrollRequest{} }))
 	mux.HandleFunc("/windows", handleCall(br, proto.TypeWindows, func() any { return &struct{}{} }))
+	mux.HandleFunc("/close-window", handleCall(br, proto.TypeCloseWindow, func() any { return &proto.CloseWindowRequest{} }))
 	mux.HandleFunc("/a11y/tree", handleCall(br, proto.TypeAccessibilityTree, func() any { return &struct{}{} }))
 	mux.HandleFunc("/monitors", handleCall(br, proto.TypeMonitors, func() any { return &proto.MonitorsRequest{} }))
 	mux.HandleFunc("/cursorpos", handleCall(br, proto.TypeCursorPos, func() any { return &struct{}{} }))

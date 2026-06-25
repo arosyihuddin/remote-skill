@@ -5,30 +5,34 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/pstar7/remote-skill/internal/handler"
+	"github.com/pstar7/remote-skill/internal/proto"
 )
 
 type WindowInfo struct {
-	App    string `json:"app"`
-	Title  string `json:"title"`
-	X      int    `json:"x"`
-	Y      int    `json:"y"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
-	Pid    int    `json:"pid,omitempty"`
-	Active bool   `json:"active"`
+	App      string `json:"app"`
+	Title    string `json:"title"`
+	X        int    `json:"x"`
+	Y        int    `json:"y"`
+	Width    int    `json:"width"`
+	Height   int    `json:"height"`
+	Pid      int    `json:"pid,omitempty"`
+	Active   bool   `json:"active"`
+	WindowID string `json:"window_id,omitempty"`
 }
 
 type hyprctlWindow struct {
-	Class  string `json:"class"`
-	Title  string `json:"title"`
-	At     []int  `json:"at"`
-	Size   []int  `json:"size"`
-	Pid    int    `json:"pid"`
-	Mapped bool   `json:"mapped"`
-	Hidden bool   `json:"hidden"`
+	Address string `json:"address"`
+	Class   string `json:"class"`
+	Title   string `json:"title"`
+	At      []int  `json:"at"`
+	Size    []int  `json:"size"`
+	Pid     int    `json:"pid"`
+	Mapped  bool   `json:"mapped"`
+	Hidden  bool   `json:"hidden"`
 }
 
 type hyprctlActive struct {
@@ -37,6 +41,7 @@ type hyprctlActive struct {
 }
 
 type swayNode struct {
+	ID       int           `json:"id"`
 	Name     string        `json:"name"`
 	Type     string        `json:"type"`
 	AppID    *string       `json:"app_id"`
@@ -133,12 +138,13 @@ func windowsHyprctl(ctx context.Context) ([]WindowInfo, error) {
 			width, height = w.Size[0], w.Size[1]
 		}
 		windows = append(windows, WindowInfo{
-			App:    w.Class,
-			Title:  w.Title,
-			X:      x, Y: y,
-			Width: width, Height: height,
-			Pid:    w.Pid,
-			Active: activeTitle != "" && (w.Class+":"+w.Title) == activeTitle,
+			App:      w.Class,
+			Title:    w.Title,
+			X:        x, Y: y,
+			Width:    width, Height: height,
+			Pid:      w.Pid,
+			Active:   activeTitle != "" && (w.Class+":"+w.Title) == activeTitle,
+			WindowID: w.Address,
 		})
 	}
 	return windows, nil
@@ -169,14 +175,15 @@ func swayCollect(nodes []swayNode) []WindowInfo {
 			}
 			if n.Name != "" {
 				windows = append(windows, WindowInfo{
-					App:    app,
-					Title:  n.Name,
-					X:      n.Rect.X,
-					Y:      n.Rect.Y,
-					Width:  n.Rect.Width,
-					Height: n.Rect.Height,
-					Pid:    n.PID,
-					Active: n.Focused,
+					App:      app,
+					Title:    n.Name,
+					X:        n.Rect.X,
+					Y:        n.Rect.Y,
+					Width:    n.Rect.Width,
+					Height:   n.Rect.Height,
+					Pid:      n.PID,
+					Active:   n.Focused,
+					WindowID: strconv.Itoa(n.ID),
 				})
 			}
 		}
@@ -212,14 +219,15 @@ func parseGNOMEJSON(out []byte) ([]WindowInfo, error) {
 	wins := make([]WindowInfo, len(raw))
 	for i, w := range raw {
 		wins[i] = WindowInfo{
-			App:    w.WmClass,
-			Title:  w.Title,
-			X:      w.X,
-			Y:      w.Y,
-			Width:  w.Width,
-			Height: w.Height,
-			Pid:    w.PID,
-			Active: w.Focused,
+			App:      w.WmClass,
+			Title:    w.Title,
+			X:        w.X,
+			Y:        w.Y,
+			Width:    w.Width,
+			Height:   w.Height,
+			Pid:      w.PID,
+			Active:   w.Focused,
+			WindowID: strconv.Itoa(w.ID),
 		}
 	}
 	return wins, nil
@@ -245,9 +253,64 @@ func windowsWMCTRL(ctx context.Context) ([]WindowInfo, error) {
 		fmt.Sscanf(parts[5], "%d", &h)
 		title := strings.Join(parts[6:], " ")
 		windows = append(windows, WindowInfo{
-			Title:  title,
+			Title:    title,
 			X: x, Y: y, Width: w, Height: h,
+			WindowID: parts[0],
 		})
 	}
 	return windows, nil
+}
+
+func CloseWindow(ctx context.Context, payload json.RawMessage, _ handler.StreamWriter) (any, error) {
+	var req proto.CloseWindowRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, err
+	}
+	if req.WindowID == "" {
+		return nil, fmt.Errorf("close_window: window_id is required")
+	}
+
+	// Hyprland
+	if err := closeHyprland(ctx, req.WindowID); err == nil {
+		return proto.EmptyResult{OK: true}, nil
+	}
+
+	// Sway
+	if err := closeSway(ctx, req.WindowID); err == nil {
+		return proto.EmptyResult{OK: true}, nil
+	}
+
+	// X11 wmctrl
+	if err := closeWMCTRL(ctx, req.WindowID); err == nil {
+		return proto.EmptyResult{OK: true}, nil
+	}
+
+	return nil, fmt.Errorf("close_window: no compositor tool available")
+}
+
+func closeHyprland(ctx context.Context, windowID string) error {
+	cmd := exec.CommandContext(ctx, "hyprctl", "dispatch", "closewindow", "address:"+windowID)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("hyprctl: %w %s", err, out)
+	}
+	return nil
+}
+
+func closeSway(ctx context.Context, windowID string) error {
+	cmd := exec.CommandContext(ctx, "swaymsg", fmt.Sprintf("[con_id=%s] kill", windowID))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("swaymsg: %w %s", err, out)
+	}
+	return nil
+}
+
+func closeWMCTRL(ctx context.Context, windowID string) error {
+	cmd := exec.CommandContext(ctx, "wmctrl", "-i", "-c", windowID)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("wmctrl: %w %s", err, out)
+	}
+	return nil
 }

@@ -185,14 +185,21 @@ function loadActiveApps(anim){
         +'<div class="active-app-name">'+escapeHtml(name)+'</div>'
         +'<div class="active-app-detail">'+escapeHtml(w.title||'')+'</div>'
         +'</div>'
-        +(w.pid?'<button class="active-app-close" onclick="closeApp('+w.pid+')">&times;</button>':'')
+        +(w.window_id?'<button class="active-app-close" onclick="closeApp(\''+w.window_id+'\','+w.pid+')">&times;</button>':w.pid?'<button class="active-app-close" onclick="closeApp(null,'+w.pid+')">&times;</button>':'')
         +'</div>'
     })
     grid.innerHTML=html
   }).catch(()=>{})
 }
-function closeApp(pid){
-  api('POST','/exec',{cmd:['sh','-c','kill '+pid],timeout_sec:5}).then(()=>{loadActiveApps()}).catch(e=>showToast('Close error: '+e.message,'error'))
+function closeApp(windowId,pid){
+  if(windowId){
+    api('POST','/close-window',{window_id:windowId}).then(()=>{loadActiveApps()}).catch(e=>{
+      if(pid){api('POST','/exec',{cmd:['sh','-c','kill '+pid],timeout_sec:5}).then(()=>{loadActiveApps()}).catch(e2=>showToast('Close error: '+e2.message,'error'))}
+      else{showToast('Close error: '+e.message,'error')}
+    })
+  }else if(pid){
+    api('POST','/exec',{cmd:['sh','-c','kill '+pid],timeout_sec:5}).then(()=>{loadActiveApps()}).catch(e=>showToast('Close error: '+e.message,'error'))
+  }
 }
 
 /* --- init --- */

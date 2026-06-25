@@ -45,6 +45,7 @@ const (
 	TypeCursorPos        MessageType = "cursorpos"    // current cursor position
 	TypeAppList          MessageType = "app_list"     // list installed applications
 	TypeAppLaunch        MessageType = "app_launch"   // launch an application
+	TypeCloseWindow      MessageType = "close_window"  // close a specific window
 
 	// Responses (agent -> server)
 	TypeResponse MessageType = "response"
@@ -290,6 +291,11 @@ type AppListResult struct {
 type AppLaunchRequest struct {
 	Name string   `json:"name"`
 	Args []string `json:"args,omitempty"`
+}
+
+// CloseWindowRequest closes a specific window by its compositor-specific ID.
+type CloseWindowRequest struct {
+	WindowID string `json:"window_id"`
 }
 
 // EmptyResult is used for actions with no return data beyond ok.
