@@ -139,7 +139,36 @@ function openFileSheet(fp){
         const mime=ext==='svg'?'image/svg+xml':ext==='webp'?'image/webp':ext==='ico'?'image/x-icon':'image/'+(ext==='jpg'?'jpeg':ext)
         $('fileImagePreview').innerHTML='<img src="data:'+mime+';base64,'+r.content+'" alt="preview" />'
       }else if(isPdf){
-        $('fileImagePreview').innerHTML='<embed src="data:application/pdf;base64,'+r.content+'" type="application/pdf" style="width:100%;height:100%;border:none" />'
+        const byteChars=atob(r.content)
+        const byteArr=new Uint8Array(byteChars.length)
+        for(let i=0;i<byteChars.length;i++) byteArr[i]=byteChars.charCodeAt(i)
+        const blob=new Blob([byteArr],{type:'application/pdf'})
+        const url=URL.createObjectURL(blob)
+        const container=$('fileImagePreview')
+        container.innerHTML='<div style="color:var(--dim)">Loading PDF…</div>'
+        container.style.flexDirection='column'
+        container.style.alignItems='center'
+        container.style.gap='8px'
+        pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+        pdfjsLib.getDocument(url).promise.then(function(pdf){
+          container.innerHTML=''
+          for(let i=1;i<=pdf.numPages;i++){
+            (function(pg){
+              pdf.getPage(pg).then(function(page){
+                const scale=container.clientWidth/page.getViewport({scale:1}).width
+                const viewport=page.getViewport({scale:scale})
+                const canvas=document.createElement('canvas')
+                canvas.className='pdf-page'
+                canvas.width=viewport.width
+                canvas.height=viewport.height
+                container.appendChild(canvas)
+                page.render({canvasContext:canvas.getContext('2d'),viewport:viewport})
+              })
+            })(i)
+          }
+        }).catch(function(err){
+          container.innerHTML='<div style="color:var(--dim)">Error: '+err.message+'</div>'
+        })
       }else if(isVideo){
         const mime=ext==='mp4'?'video/mp4':ext==='webm'?'video/webm':'video/ogg'
         $('fileImagePreview').innerHTML='<video controls style="max-width:100%;max-height:100%" src="data:'+mime+';base64,'+r.content+'"></video>'

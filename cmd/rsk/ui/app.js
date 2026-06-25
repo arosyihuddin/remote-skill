@@ -28,6 +28,7 @@ function checkAuth(){
     $('loginOverlay').style.display='none'
     $('logoutBtn').style.display='flex'
     onDevices(data)
+    fetchPromptInfo()
   }).catch(()=>{
     authenticated=false
     $('loginOverlay').style.display='flex'
@@ -600,7 +601,7 @@ function showModal(opts){
 function escapeHtml(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function escapeAttr(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function escapeRegex(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
-function formatSize(n){if(!n&&n!==0)return'';if(n<1024)return n+'B';if(n<1024*1024)return(n/1024).toFixed(1)+'K';return(n/1024/1024).toFixed(1)+'M'}
+
 
 /* --- init --- */
 checkAuth()
