@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
-	"strconv"
-	"strings"
 
 	"github.com/pstar7/remote-skill/internal/handler"
 	"github.com/pstar7/remote-skill/internal/proto"
@@ -22,62 +19,6 @@ type WindowInfo struct {
 	Pid      int    `json:"pid,omitempty"`
 	Active   bool   `json:"active"`
 	WindowID string `json:"window_id,omitempty"`
-}
-
-type hyprctlWindow struct {
-	Address string `json:"address"`
-	Class   string `json:"class"`
-	Title   string `json:"title"`
-	At      []int  `json:"at"`
-	Size    []int  `json:"size"`
-	Pid     int    `json:"pid"`
-	Mapped  bool   `json:"mapped"`
-	Hidden  bool   `json:"hidden"`
-}
-
-type hyprctlActive struct {
-	Class string `json:"class"`
-	Title string `json:"title"`
-}
-
-type swayNode struct {
-	ID       int           `json:"id"`
-	Name     string        `json:"name"`
-	Type     string        `json:"type"`
-	AppID    *string       `json:"app_id"`
-	PID      int           `json:"pid"`
-	Focused  bool          `json:"focused"`
-	Rect     swayRect      `json:"rect"`
-	Nodes    []swayNode    `json:"nodes"`
-	Floating []swayNode    `json:"floating_nodes"`
-	WinProps *swayWinProps `json:"window_properties"`
-}
-
-type swayRect struct {
-	X      int `json:"x"`
-	Y      int `json:"y"`
-	Width  int `json:"width"`
-	Height int `json:"height"`
-}
-
-type swayWinProps struct {
-	Class string `json:"class"`
-}
-
-type swayTree struct {
-	Nodes []swayNode `json:"nodes"`
-}
-
-type gnomeWindowRaw struct {
-	ID     int    `json:"id"`
-	Title  string `json:"title"`
-	WmClass string `json:"wm_class"`
-	PID    int    `json:"pid"`
-	X      int    `json:"x"`
-	Y      int    `json:"y"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
-	Focused bool  `json:"focused"`
 }
 
 func Windows(ctx context.Context, _ json.RawMessage, _ handler.StreamWriter) (any, error) {
@@ -104,163 +45,6 @@ func Windows(ctx context.Context, _ json.RawMessage, _ handler.StreamWriter) (an
 	return nil, fmt.Errorf("windows: no compositor tool available (try installing hyprctl, swaymsg, or wmctrl)")
 }
 
-func windowsHyprctl(ctx context.Context) ([]WindowInfo, error) {
-	cmd := exec.CommandContext(ctx, "hyprctl", "clients", "-j")
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-	var all []hyprctlWindow
-	if err := json.Unmarshal(out, &all); err != nil {
-		return nil, fmt.Errorf("hyprctl parse: %w", err)
-	}
-
-	activeTitle := ""
-	activeCmd := exec.CommandContext(ctx, "hyprctl", "activewindow", "-j")
-	if activeOut, err := activeCmd.Output(); err == nil {
-		var act hyprctlActive
-		if json.Unmarshal(activeOut, &act) == nil {
-			activeTitle = act.Class + ":" + act.Title
-		}
-	}
-
-	var windows []WindowInfo
-	for _, w := range all {
-		if !w.Mapped || w.Hidden {
-			continue
-		}
-		x, y := 0, 0
-		if len(w.At) >= 2 {
-			x, y = w.At[0], w.At[1]
-		}
-		width, height := 0, 0
-		if len(w.Size) >= 2 {
-			width, height = w.Size[0], w.Size[1]
-		}
-		windows = append(windows, WindowInfo{
-			App:      w.Class,
-			Title:    w.Title,
-			X:        x, Y: y,
-			Width:    width, Height: height,
-			Pid:      w.Pid,
-			Active:   activeTitle != "" && (w.Class+":"+w.Title) == activeTitle,
-			WindowID: w.Address,
-		})
-	}
-	return windows, nil
-}
-
-func windowsSway(ctx context.Context) ([]WindowInfo, error) {
-	cmd := exec.CommandContext(ctx, "swaymsg", "-t", "get_tree")
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-	var tree swayTree
-	if err := json.Unmarshal(out, &tree); err != nil {
-		return nil, fmt.Errorf("swaymsg parse: %w", err)
-	}
-	return swayCollect(tree.Nodes), nil
-}
-
-func swayCollect(nodes []swayNode) []WindowInfo {
-	var windows []WindowInfo
-	for _, n := range nodes {
-		if n.Type == "con" || n.Type == "floating_con" {
-			app := ""
-			if n.AppID != nil {
-				app = *n.AppID
-			} else if n.WinProps != nil {
-				app = n.WinProps.Class
-			}
-			if n.Name != "" {
-				windows = append(windows, WindowInfo{
-					App:      app,
-					Title:    n.Name,
-					X:        n.Rect.X,
-					Y:        n.Rect.Y,
-					Width:    n.Rect.Width,
-					Height:   n.Rect.Height,
-					Pid:      n.PID,
-					Active:   n.Focused,
-					WindowID: strconv.Itoa(n.ID),
-				})
-			}
-		}
-		windows = append(windows, swayCollect(n.Nodes)...)
-		windows = append(windows, swayCollect(n.Floating)...)
-	}
-	return windows
-}
-
-func windowsGNOME(ctx context.Context) ([]WindowInfo, error) {
-	cmd := exec.CommandContext(ctx, "gdbus", "call", "--session",
-		"--dest", "org.gnome.Shell",
-		"--object-path", "/org/gnome/Shell/Extensions/Windows",
-		"--method", "org.gnome.Shell.Extensions.Windows.List")
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-	return parseGNOMEJSON(out)
-}
-
-func parseGNOMEJSON(out []byte) ([]WindowInfo, error) {
-	s := string(out)
-	start := strings.IndexByte(s, '\'')
-	end := strings.LastIndexByte(s, '\'')
-	if start == -1 || end <= start {
-		return nil, fmt.Errorf("parse gnome list: unexpected gdbus output")
-	}
-	var raw []gnomeWindowRaw
-	if err := json.Unmarshal([]byte(s[start+1:end]), &raw); err != nil {
-		return nil, fmt.Errorf("parse gnome list: %w", err)
-	}
-	wins := make([]WindowInfo, len(raw))
-	for i, w := range raw {
-		wins[i] = WindowInfo{
-			App:      w.WmClass,
-			Title:    w.Title,
-			X:        w.X,
-			Y:        w.Y,
-			Width:    w.Width,
-			Height:   w.Height,
-			Pid:      w.PID,
-			Active:   w.Focused,
-			WindowID: strconv.Itoa(w.ID),
-		}
-	}
-	return wins, nil
-}
-
-func windowsWMCTRL(ctx context.Context) ([]WindowInfo, error) {
-	cmd := exec.CommandContext(ctx, "wmctrl", "-lG")
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("wmctrl: %w", err)
-	}
-	var windows []WindowInfo
-	for _, line := range strings.Split(string(out), "\n") {
-		parts := strings.Fields(line)
-		if len(parts) < 7 {
-			continue
-		}
-		var id, x, y, w, h int
-		fmt.Sscanf(parts[0], "%x", &id)
-		fmt.Sscanf(parts[2], "%d", &x)
-		fmt.Sscanf(parts[3], "%d", &y)
-		fmt.Sscanf(parts[4], "%d", &w)
-		fmt.Sscanf(parts[5], "%d", &h)
-		title := strings.Join(parts[6:], " ")
-		windows = append(windows, WindowInfo{
-			Title:    title,
-			X: x, Y: y, Width: w, Height: h,
-			WindowID: parts[0],
-		})
-	}
-	return windows, nil
-}
-
 func CloseWindow(ctx context.Context, payload json.RawMessage, _ handler.StreamWriter) (any, error) {
 	var req proto.CloseWindowRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
@@ -270,47 +54,17 @@ func CloseWindow(ctx context.Context, payload json.RawMessage, _ handler.StreamW
 		return nil, fmt.Errorf("close_window: window_id is required")
 	}
 
-	// Hyprland
 	if err := closeHyprland(ctx, req.WindowID); err == nil {
 		return proto.EmptyResult{OK: true}, nil
 	}
 
-	// Sway
 	if err := closeSway(ctx, req.WindowID); err == nil {
 		return proto.EmptyResult{OK: true}, nil
 	}
 
-	// X11 wmctrl
 	if err := closeWMCTRL(ctx, req.WindowID); err == nil {
 		return proto.EmptyResult{OK: true}, nil
 	}
 
 	return nil, fmt.Errorf("close_window: no compositor tool available")
-}
-
-func closeHyprland(ctx context.Context, windowID string) error {
-	cmd := exec.CommandContext(ctx, "hyprctl", "dispatch", "closewindow", "address:"+windowID)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("hyprctl: %w %s", err, out)
-	}
-	return nil
-}
-
-func closeSway(ctx context.Context, windowID string) error {
-	cmd := exec.CommandContext(ctx, "swaymsg", fmt.Sprintf("[con_id=%s] kill", windowID))
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("swaymsg: %w %s", err, out)
-	}
-	return nil
-}
-
-func closeWMCTRL(ctx context.Context, windowID string) error {
-	cmd := exec.CommandContext(ctx, "wmctrl", "-i", "-c", windowID)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("wmctrl: %w %s", err, out)
-	}
-	return nil
 }
