@@ -65,6 +65,7 @@ func runDaemon(args []string) {
 	agentMux := http.NewServeMux()
 	agentMux.HandleFunc("/agent", agentHandler(br, cfg.Token))
 	agentMux.HandleFunc("/cli", cliWSHandler(br, cfg.Token))
+	agentMux.HandleFunc("/live", liveWSHandler(br, cfg.Token))
 	agentSrv := &http.Server{Addr: cfg.AgentListen, Handler: agentMux}
 
 	// Database for shortcuts
@@ -187,6 +188,23 @@ func cliWSHandler(br *broker.Broker, token string) http.HandlerFunc {
 		ctx := r.Context()
 		if err := br.HandleCLI(ctx, c, token); err != nil {
 			log.Printf("cli ws: %v", err)
+		}
+		_ = c.Close(websocket.StatusNormalClosure, "")
+	}
+}
+
+func liveWSHandler(br *broker.Broker, token string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+			InsecureSkipVerify: true,
+		})
+		if err != nil {
+			return
+		}
+		c.SetReadLimit(64 << 20)
+		ctx := r.Context()
+		if err := br.HandleLiveCLI(ctx, c, token); err != nil {
+			log.Printf("live ws: %v", err)
 		}
 		_ = c.Close(websocket.StatusNormalClosure, "")
 	}

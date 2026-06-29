@@ -1,233 +1,181 @@
-/* --- shell --- */
-var cmdHistory=[]
-var histIdx=-1
-var user=''
-var pwd=''
-var dirDisp='~'
-var gitBranch=''
-var gitStatus=''
-
-function fetchPromptInfo(){
-  return api('POST','/exec',{cmd:['sh','-c',`whoami 2>/dev/null;echo "---";pwd 2>/dev/null;echo "---";git symbolic-ref --short HEAD 2>/dev/null||true;echo "---";git status --porcelain 2>/dev/null|head -20||true`],timeout_sec:5}).then(r=>{
-    if(!r.stdout)return
-    const parts=r.stdout.split('---\n')
-    user=(parts[0]||'').trim()||'user'
-    const home='/home/'+user
-    pwd=home
-    dirDisp='~'
-    gitBranch=(parts[2]||'').trim()
-    var gs=parts[3]||''
-    gitStatus=gs.trim()?calcGitStatus(gs):''
-    renderPrompt($('inpPrompt'))
-  }).catch(()=>{})
-}
-
-function calcGitStatus(porcelain){
-  var s={m:0,a:0,d:0,'?':0}
-  porcelain.split('\n').forEach(l=>{
-    var c=l.charAt(0)
-    if(c==='M'||c===' '&&l.charAt(1)==='M')s.m++
-    else if(c==='A')s.a++
-    else if(c==='D')s.d++
-    else if(c==='?')s['?']++
+/* --- shell prompt info (shared with files tab) --- */
+var user = "",
+  pwd = "",
+  dirDisp = "~";
+function fetchPromptInfo() {
+  return api("POST", "/exec", {
+    cmd: ["sh", "-c", 'whoami 2>/dev/null;echo "---";pwd 2>/dev/null'],
+    timeout_sec: 5,
   })
-  var out=[]
-  if(s.a)out.push('+'+s.a)
-  if(s.m)out.push('!'+s.m)
-  if(s.d)out.push('x'+s.d)
-  if(s['?'])out.push('?'+s['?'])
-  return out.join(' ')
-}
-
-function renderPrompt(container){
-  var h='<span class="prompt-seg usr">'+escapeHtml(user)+'</span>'
-  h+='<span class="prompt-seg dir">'+escapeHtml(dirDisp)+'</span>'
-  if(gitBranch) h+='<span class="prompt-seg git">'+escapeHtml(gitBranch)+(gitStatus?' '+escapeHtml(gitStatus):'')+'</span>'
-  h+='<span class="prompt-seg time" id="promptTime">'+now()+'</span>'
-  container.innerHTML=h
-}
-
-function now(){
-  var d=new Date()
-  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')
-}
-
-setInterval(function(){var e=$('promptTime');if(e)e.textContent=now()},10000)
-
-var autoItems=[],autoIdx=-1,autoWord='',autoWordStart=0,autoIsFirst=false
-
-$('shellCmd').onkeydown=function(e){
-  const dd=$('autoDropdown')
-  if(e.key==='Tab'){
-    e.preventDefault()
-    if(dd.style.display==='block'){
-      e.shiftKey?autoIdx--:autoIdx++
-      if(autoIdx<0)autoIdx=autoItems.length-1
-      if(autoIdx>=autoItems.length)autoIdx=0
-      showAutoDropdown()
-      return
-    }
-    doAutoComplete(this)
-    return
-  }
-  if(e.key==='Escape'){
-    if(dd.style.display==='block'){hideAutoDropdown();e.preventDefault()}
-    return
-  }
-  if(e.key==='Enter'){
-    if(dd.style.display==='block'&&autoIdx>=0){
-      e.preventDefault();applyAutoComplete(this);return
-    }
-    const cmd=this.value.trim()
-    if(!cmd)return
-    this.value=''
-    if(cmd==='clear'){$('termBody').querySelectorAll(':scope > :not(.term-input-line)').forEach(e=>e.remove());$('shellCmd').focus();return}
-    cmdHistory.push(cmd)
-    histIdx=cmdHistory.length
-    const body=$('termBody'),inputLine=body.querySelector('.term-input-line')
-    const[prLine,cmdLine]=renderCmdLine(cmd)
-    body.insertBefore(prLine,inputLine)
-    body.insertBefore(cmdLine,inputLine)
-    const runLine=termLine('<span style="color:#666">running...</span>',true)
-    body.insertBefore(runLine,inputLine)
-    inputLine.scrollIntoView({block:'end'})
-    if(/^cd(\s|$)/.test(cmd)){
-      body.removeChild(runLine)
-      handleCD(cmd)
-      return
-    }
-    const realCmd=pwd?'cd '+quote(pwd)+' && '+cmd:cmd
-    api('POST','/exec',{cmd:['sh','-c',realCmd],timeout_sec:30}).then(r=>{
-      body.removeChild(runLine)
-      if(/^ls(\s|$)/.test(cmd)&&r.stdout){
-        body.insertBefore(lsGrid(r.stdout.trim()),inputLine)
-      }else{
-        var s=''
-        if(r.stdout)s+=escapeHtml(r.stdout)
-        if(r.stderr)s+='\n<span class="error">'+escapeHtml(r.stderr)+'</span>'
-        if(r.exit_code!==0)s+='\n<span class="error">[exit '+r.exit_code+']</span>'
-        if(s) body.insertBefore(termLine(s,true),inputLine)
+    .then(function (r) {
+      if (!r || !r.stdout) return;
+      var parts = r.stdout.split("---\n");
+      user = (parts[0] || "").trim() || "user";
+      var home = "/home/" + user;
+      pwd = home;
+      dirDisp = "~";
+      if (parts[1]) {
+        pwd = parts[1].trim();
+        dirDisp = pwd.replace(new RegExp("^" + home), "~");
       }
-      inputLine.scrollIntoView({block:'end'})
-      $('shellCmd').focus()
-    }).catch(e=>{
-      body.removeChild(runLine)
-      body.insertBefore(termLine('<span class="error">Error: '+escapeHtml(e.message)+'</span>',true),inputLine)
-      inputLine.scrollIntoView({block:'end'})
-      $('shellCmd').focus()
     })
-  }else if(e.key==='ArrowUp'){
-    if(histIdx>0){histIdx--;this.value=cmdHistory[histIdx]}
-    e.preventDefault()
-  }else if(e.key==='ArrowDown'){
-    if(histIdx<cmdHistory.length-1){histIdx++;this.value=cmdHistory[histIdx]}
-    else{histIdx=cmdHistory.length;this.value=''}
-    e.preventDefault()
-  }else if(e.key==='l'&&(e.ctrlKey||e.metaKey)){
-    e.preventDefault()
-    $('termBody').querySelectorAll(':scope > :not(.term-input-line)').forEach(e=>e.remove())
-    $('shellCmd').focus()
-  }
-}
-$('shellOutput').onclick=function(){$('shellCmd').focus()}
-$('shellCmd').oninput=function(){hideAutoDropdown()}
-
-function doAutoComplete(input){
-  const val=input.value
-  const cursor=input.selectionStart
-  const before=val.slice(0,cursor)
-  autoWordStart=before.lastIndexOf(' ')+1
-  autoWord=val.slice(autoWordStart,cursor)
-  autoIsFirst=autoWordStart===0
-  if(autoIsFirst){
-    const cmds=['cd','ls','clear','pwd','echo','cat','cp','mv','rm','mkdir','touch','git','go','head','tail','less','grep']
-    autoItems=cmds.concat(cmdHistory).filter(c=>c.startsWith(autoWord)).filter((v,i,a)=>a.indexOf(v)===i)
-    if(autoItems.length===1){input.value=val.slice(0,autoWordStart)+autoItems[0]+val.slice(cursor);input.setSelectionRange(autoWordStart+autoItems[0].length,autoWordStart+autoItems[0].length);hideAutoDropdown();return}
-    autoIdx=-1;showAutoDropdown()
-  }else{
-    const prefix=val.slice(0,autoWordStart)
-    const lastSlash=autoWord.lastIndexOf('/')
-    const dirPart=lastSlash<0?'':autoWord.slice(0,lastSlash+1)
-    const filePrefix=lastSlash<0?autoWord:autoWord.slice(lastSlash+1)
-    const baseDir=dirPart.startsWith('/')?dirPart:(pwd?pwd+'/':'')+dirPart
-    api('POST','/ls',{path:baseDir||'/'}).then(r=>{
-      if(!r.entries)return
-      autoItems=r.entries.filter(e=>e.name.startsWith(filePrefix)).map(e=>e.name+(e.is_dir?'/':''))
-      if(autoItems.length===1){input.value=prefix+dirPart+autoItems[0]+val.slice(cursor);input.setSelectionRange((prefix+dirPart+autoItems[0]).length,(prefix+dirPart+autoItems[0]).length);hideAutoDropdown();return}
-      autoIdx=-1;showAutoDropdown()
-    }).catch(()=>{})
-  }
+    .catch(function () {});
 }
 
-function showAutoDropdown(){
-  const dd=$('autoDropdown')
-  if(!autoItems.length){dd.style.display='none';return}
-  dd.innerHTML=autoItems.map((n,i)=>{
-    const cl='auto-item'+(i===autoIdx?' active':'')
-    return '<div class="'+cl+'">'+fileIcon(n)+escapeHtml(n)+'</div>'
-  }).join('')
-  const rect=$('shellCmd').getBoundingClientRect()
-  dd.style.position='fixed'
-  dd.style.left=rect.left+'px'
-  dd.style.width=rect.width+'px'
-  dd.style.bottom=(window.innerHeight-rect.top)+'px'
-  dd.style.display='block'
-  if(autoIdx>=0) dd.querySelector('.active')?.scrollIntoView({block:'nearest'})
-}
+/* --- shell xterm.js terminal --- */
+var term = null,
+  liveWS = null,
+  termFit = null;
+var shellTermStarted = false,
+  shellLiveActive = false;
 
-function hideAutoDropdown(){
-  $('autoDropdown').style.display='none'
-  autoItems=[];autoIdx=-1
-}
-
-function applyAutoComplete(input){
-  if(autoIdx<0||autoIdx>=autoItems.length)return
-  const val=input.value
-  const sel=autoItems[autoIdx]
-  input.value=val.slice(0,autoWordStart)+sel+val.slice(input.selectionStart)
-  const pos=autoWordStart+sel.length
-  input.setSelectionRange(pos,pos)
-  hideAutoDropdown()
-  input.focus()
-}
-
-function renderCmdLine(cmd){
-  const promptLine=document.createElement('div');promptLine.className='term-line'
-  promptLine.innerHTML='<div class="prompt">'+renderPromptStr()+'</div>'
-  const cmdLine=document.createElement('div');cmdLine.className='term-line'
-  cmdLine.innerHTML='<span style="color:var(--green);font-weight:600">▶</span> <span class="cmd">'+escapeHtml(cmd)+'</span>'
-  return[promptLine,cmdLine]
-}
-
-function renderPromptStr(){
-  var h='<span class="prompt-seg usr">'+escapeHtml(user)+'</span>'
-  h+='<span class="prompt-seg dir">'+escapeHtml(dirDisp)+'</span>'
-  if(gitBranch) h+='<span class="prompt-seg git">'+escapeHtml(gitBranch)+(gitStatus?' '+escapeHtml(gitStatus):'')+'</span>'
-  h+='<span class="prompt-seg time">'+now()+'</span>'
-  return h
-}
-
-function handleCD(cmd){
-  var target=(cmd.match(/^cd\s+(.+)/)||[])[1]||''
-  if(!target||target==='~'){target='~'}
-  target=target.replace(/^~/, '/home/'+user)
-  api('POST','/exec',{cmd:['sh','-c','cd '+quote(pwd)+' && cd '+quote(target)+' && pwd && echo "---" && (git symbolic-ref --short HEAD 2>/dev/null||echo "") && echo "---" && (git status --porcelain 2>/dev/null|head -20||true)'],timeout_sec:5}).then(r=>{
-    if(r.stdout){
-      var parts=r.stdout.split('---\n')
-      pwd=(parts[0]||'').trim()
-      dirDisp=pwd.replace(RegExp('^'+escapeRegex('/home/'+user)),'~')
-      gitBranch=(parts[1]||'').trim()
-      var gs=(parts[2]||'').trim()
-      gitStatus=gs?calcGitStatus(gs):''
-      renderPrompt($('inpPrompt'))
+function startShell() {
+  if (!deviceId || shellTermStarted) return;
+  shellTermStarted = true;
+  term = new Terminal({
+    cursorBlink: true,
+    cursorStyle: "block",
+    fontSize: 14,
+    allowTransparency: true,
+    theme: {
+      background: "#1e1e1e",
+      foreground: "#d4d4d4",
+      cursor: "#d4d4d4",
+      selectionBackground: "#264f78",
+    },
+  });
+  var fa = new FitAddon.FitAddon();
+  term.loadAddon(fa);
+  termFit = fa;
+  var c = $("terminal-container");
+  c.innerHTML = "";
+  term.open(c);
+  fa.fit();
+  setTimeout(function () {
+    fa.fit();
+    term.focus();
+  }, 50);
+  term.onData(function (d) {
+    if (liveWS && liveWS.readyState === WebSocket.OPEN && shellLiveActive) {
+      var b = new Uint8Array(1 + d.length);
+      b[0] = 0x00;
+      for (var i = 0; i < d.length; i++) b[i + 1] = d.charCodeAt(i);
+      liveWS.send(b);
     }
-  }).catch(()=>{})
+  });
+  term.onResize(function (s) {
+    if (liveWS && liveWS.readyState === WebSocket.OPEN && shellLiveActive) {
+      var b = new Uint8Array(5);
+      b[0] = 0x02;
+      b[1] = (s.cols >> 8) & 0xff;
+      b[2] = s.cols & 0xff;
+      b[3] = (s.rows >> 8) & 0xff;
+      b[4] = s.rows & 0xff;
+      liveWS.send(b);
+    }
+  });
+  connectWS();
 }
 
-function quote(s){return "'"+s.replace(/'/g,"'\\''")+"'"}
+function connectWS() {
+  shellLiveActive = false;
+  if (liveWS) {
+    liveWS.onclose = null;
+    liveWS.close();
+    liveWS = null;
+  }
+  if (!deviceId) return;
+  var p = location.protocol === "https:" ? "wss:" : "ws:";
+  liveWS = new WebSocket(p + "//" + location.host + "/live");
+  liveWS.binaryType = "arraybuffer";
+  liveWS.onopen = function () {
+    liveWS.send(
+      JSON.stringify({
+        type: "hello",
+        id: "hello-1",
+        payload: { device_id: deviceId },
+      }),
+    );
+  };
+  liveWS.onmessage = function (e) {
+    if (typeof e.data === "string") {
+      try {
+        var f = JSON.parse(e.data);
+        if (f.type === "ack") {
+          shellLiveActive = true;
+          liveWS.send(
+            JSON.stringify({
+              type: "live",
+              id: "live-req",
+              payload: { cols: term.cols, rows: term.rows },
+            }),
+          );
+        } else if (f.type === "error") {
+          var ep = JSON.parse(f.payload);
+          term.write(
+            "\r\n\x1b[31m[error: " + (ep.message || "unknown") + "]\x1b[0m\r\n",
+          );
+        }
+      } catch (_) {}
+    } else if (e.data instanceof ArrayBuffer && shellLiveActive) {
+      var v = new Uint8Array(e.data);
+      if (v[0] === 0x01) {
+        term.write(new Uint8Array(e.data, 1));
+      } else if (v[0] === 0x03) {
+        var m =
+          e.data.byteLength > 1
+            ? new TextDecoder().decode(e.data.slice(1))
+            : "";
+        term.write("\r\n[session ended" + (m ? ": " + m : "") + "]\r\n");
+        shellLiveActive = false;
+      }
+    }
+  };
+  liveWS.onclose = function () {
+    if (shellLiveActive) term.write("\r\n[connection closed]\r\n");
+    shellLiveActive = false;
+    liveWS = null;
+  };
+  liveWS.onerror = function () {
+    if (term) term.write("\r\n\x1b[31m[WebSocket error]\x1b[0m\r\n");
+  };
+}
 
-function termLine(html,isOutput){const d=document.createElement('div');d.className='term-line'+(isOutput?' output':'');d.innerHTML=html;return d}
+function stopShell() {
+  if (liveWS) {
+    liveWS.onclose = null;
+    liveWS.close();
+    liveWS = null;
+  }
+  shellLiveActive = false;
+  if (term) {
+    term.dispose();
+    term = null;
+  }
+  termFit = null;
+  shellTermStarted = false;
+}
 
-// init prompt — render before async fetch
-renderPrompt($('inpPrompt'))
-fetchPromptInfo()
+function onTabShell() {
+  if (!deviceId) return;
+  if (!shellTermStarted) startShell();
+  else if (termFit) {
+    termFit.fit();
+    term.focus();
+  }
+}
+
+function onShellDeviceChange() {
+  if (!shellTermStarted) return;
+  shellLiveActive = false;
+  if (liveWS) {
+    liveWS.onclose = null;
+    liveWS.close();
+    liveWS = null;
+  }
+  if (
+    document.querySelector('[data-tab="shell"]') &&
+    document.querySelector('[data-tab="shell"]').classList.contains("active")
+  )
+    connectWS();
+}

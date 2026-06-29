@@ -208,3 +208,45 @@
 .ls-item.video {
   color: #ef4444;
 }
+
+/* shell tab redesign */
+#tab-shell {
+  display: none;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+#tab-shell.active {
+  display: flex;
+}
+
+.shell-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.mode-btn {
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.mode-btn:hover {
+  background: var(--card-hover);
+  color: var(--text);
+}
+.mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+

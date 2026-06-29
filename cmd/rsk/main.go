@@ -203,4 +203,5 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  wait <sec>          Sleep N seconds\n")
 	fmt.Fprintf(os.Stderr, "  env                 Show env vars\n")
 	fmt.Fprintf(os.Stderr, "  clip get|set        Clipboard operations\n")
+	fmt.Fprintf(os.Stderr, "  live                Open interactive terminal session\n")
 }

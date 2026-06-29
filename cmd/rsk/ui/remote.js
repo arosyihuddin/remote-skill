@@ -70,7 +70,10 @@ function tpMove(px,py){
   const dx=(px-tp.lastX)*speed,dy=(py-tp.lastY)*speed
   tp.lastX=px;tp.lastY=py
   if(Math.abs(px-tp.startX)>4||Math.abs(py-tp.startY)>4) tp.moved=true
-  if(Math.abs(dx)>=1||Math.abs(dy)>=1){cursor.style.left=px+'px';cursor.style.top=py+'px';api('POST','/mouse',{x:Math.round(dx),y:Math.round(dy),relative:true}).catch(()=>{})}
+  if(Math.abs(dx)>=1||Math.abs(dy)>=1){cursor.style.left=px+'px';cursor.style.top=py+'px';
+    if(mode==='scroll'){api('POST','/scroll',{dy:Math.round(dy/10)}).catch(()=>{})}
+    else{api('POST','/mouse',{x:Math.round(dx),y:Math.round(dy),relative:true}).catch(()=>{})}
+  }
 }
 function tpUp(e){
   if(!tp.touching)return

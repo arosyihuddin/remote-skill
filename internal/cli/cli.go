@@ -67,7 +67,7 @@ var knownCommands = map[string]bool{
 	"screenshot": true, "click": true, "type": true, "key": true,
 	"mouse": true, "clip": true, "scroll": true, "devices": true,
 	"windows": true, "a11y": true, "monitors": true, "cursorpos": true, "drag": true, "board": true,
-	"apps": true, "open": true, "wait": true, "env": true,
+	"apps": true, "open": true, "wait": true, "env": true, "live": true,
 	"-h": true, "--help": true, "help": true,
 }
 
@@ -99,6 +99,9 @@ func Run(command string, args []string) {
 		return
 	case "env":
 		runEnv()
+		return
+	case "live":
+		runLive(serverURL, token, device)
 		return
 	}
 
@@ -206,4 +209,5 @@ func printUsage(_ string) {
 	fmt.Fprintf(os.Stderr, "  wait <sec>              Sleep N seconds\n")
 	fmt.Fprintf(os.Stderr, "  env                     Show env vars\n")
 	fmt.Fprintf(os.Stderr, "  clip get|set            Clipboard operations\n")
+	fmt.Fprintf(os.Stderr, "  live                    Open interactive terminal session\n")
 }

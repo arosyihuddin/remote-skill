@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/pstar7/remote-skill/internal/broker"
 	"github.com/pstar7/remote-skill/internal/db"
 	"github.com/pstar7/remote-skill/internal/handlers"
@@ -153,6 +155,18 @@ func registerMonitoringRoutes(mux *http.ServeMux, br *broker.Broker, database *d
 	mux.HandleFunc("/apps/launch", handleCall(br, proto.TypeAppLaunch, func() any { return &proto.AppLaunchRequest{} }))
 	mux.HandleFunc("/screen.ws", handlers.ServeScreenWS)
 	mux.HandleFunc("/exec/stream", handleExecStream(br))
+	mux.HandleFunc("/live", func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+		if err != nil {
+			return
+		}
+		c.SetReadLimit(64 << 20)
+		ctx := r.Context()
+		if err := br.HandleLiveSession(ctx, c); err != nil {
+			log.Printf("live session: %v", err)
+		}
+		_ = c.Close(websocket.StatusNormalClosure, "")
+	})
 
 	mux.HandleFunc("/shortcuts", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -268,7 +282,7 @@ func handleExecStream(br *broker.Broker) http.HandlerFunc {
 
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Minute)
 		defer cancel()
-		pr, cleanup, err := dev.SendRequest(ctx, proto.TypeExec, &req, true)
+		pr, cleanup, err := dev.SendRequest(ctx, proto.TypeExec, &req)
 		if err != nil {
 			fmt.Fprintf(w, `{"error":%q}`+"\n", err.Error())
 			return

@@ -78,6 +78,7 @@ func runDaemon(args []string) {
 	n.Register(proto.TypeAppList, deps.WrapAppList())
 	n.Register(proto.TypeAppLaunch, deps.WrapAppLaunch())
 	n.Register(proto.TypeCloseWindow, deps.WrapCloseWindow())
+	n.Register(proto.TypeLive, deps.WrapLive())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

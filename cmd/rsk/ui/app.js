@@ -28,7 +28,7 @@ function checkAuth(){
     $('loginOverlay').style.display='none'
     $('logoutBtn').style.display='flex'
     onDevices(data)
-    fetchPromptInfo()
+    if(typeof fetchPromptInfo==='function') fetchPromptInfo()
   }).catch(()=>{
     authenticated=false
     $('loginOverlay').style.display='flex'
@@ -84,7 +84,10 @@ function onDevices(data){
   if(deviceId!==prevId) onDeviceChange()
 }
 
-function onDeviceChange(){updateDashboard()}
+function onDeviceChange(){
+  updateDashboard()
+  if(typeof onShellDeviceChange==='function') onShellDeviceChange()
+}
 
 /* --- tab switching --- */
 document.querySelectorAll('.nav-item').forEach(btn=>{
@@ -96,6 +99,7 @@ document.querySelectorAll('.nav-item').forEach(btn=>{
     if(tab){
       tab.classList.add('active')
       if(this.dataset.tab==='files'&&!fileHistory.length) listDir(pwd||'/')
+      if(this.dataset.tab==='shell'&&typeof onTabShell==='function') setTimeout(onTabShell,50)
     }
   }
 })

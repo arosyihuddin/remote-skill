@@ -4,6 +4,7 @@ package node
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -16,6 +17,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/pstar7/remote-skill/internal/handler"
+	"github.com/pstar7/remote-skill/internal/handlers"
 	"github.com/pstar7/remote-skill/internal/proto"
 )
 
@@ -123,9 +125,37 @@ func (n *Node) runOnce(ctx context.Context) error {
 	// Read loop
 	dispatchSem := make(chan struct{}, maxConcurrentDispatches)
 	for {
-		_, data, err := c.Read(ctx)
+		msgType, data, err := c.Read(ctx)
 		if err != nil {
 			return err
+		}
+		if msgType == websocket.MessageBinary {
+			if len(data) < 1 {
+				continue
+			}
+			switch data[0] {
+			case proto.BinaryFrameStdin:
+				handlers.RangeLiveSession(func(id string, s *handlers.LiveSession) bool {
+					select {
+					case s.InputChan <- data:
+					default:
+					}
+					return false
+				})
+			case proto.BinaryFrameResize:
+				if len(data) >= 5 {
+					cols := binary.BigEndian.Uint16(data[1:3])
+					rows := binary.BigEndian.Uint16(data[3:5])
+					handlers.RangeLiveSession(func(id string, s *handlers.LiveSession) bool {
+						select {
+						case s.ResizeChan <- proto.LiveResizeRequest{Cols: cols, Rows: rows}:
+						default:
+						}
+						return false
+					})
+				}
+			}
+			continue
 		}
 		var f proto.Frame
 		if err := json.Unmarshal(data, &f); err != nil {

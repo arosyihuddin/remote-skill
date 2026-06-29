@@ -46,6 +46,13 @@ const (
 	TypeAppList          MessageType = "app_list"     // list installed applications
 	TypeAppLaunch        MessageType = "app_launch"   // launch an application
 	TypeCloseWindow      MessageType = "close_window"  // close a specific window
+	TypeLive             MessageType = "live"          // start interactive PTY session (shell)
+
+	// Binary frame types for live PTY sessions (raw binary WebSocket frames)
+	BinaryFrameStdin  byte = 0x00
+	BinaryFrameStdout byte = 0x01
+	BinaryFrameResize byte = 0x02
+	BinaryFrameExit   byte = 0x03
 
 	// Responses (agent -> server)
 	TypeResponse MessageType = "response"
@@ -296,6 +303,18 @@ type AppLaunchRequest struct {
 // CloseWindowRequest closes a specific window by its compositor-specific ID.
 type CloseWindowRequest struct {
 	WindowID string `json:"window_id"`
+}
+
+// LiveRequest starts an interactive PTY session.
+type LiveRequest struct {
+	Cols uint16 `json:"cols"`
+	Rows uint16 `json:"rows"`
+}
+
+// LiveResizeRequest resizes the PTY.
+type LiveResizeRequest struct {
+	Cols uint16 `json:"cols"`
+	Rows uint16 `json:"rows"`
 }
 
 // EmptyResult is used for actions with no return data beyond ok.

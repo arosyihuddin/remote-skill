@@ -203,4 +203,20 @@ func (d *Deps) WrapCursorPos() handler.Handler          { return d.wrapGUI("curs
 func (d *Deps) WrapAppList() handler.Handler            { return d.wrapGUI("app_list", ListApps) }
 func (d *Deps) WrapAppLaunch() handler.Handler           { return d.wrapGUI("app_launch", LaunchApp) }
 func (d *Deps) WrapCloseWindow() handler.Handler         { return d.wrapGUI("close_window", CloseWindow) }
+func (d *Deps) WrapLive() handler.Handler {
+	return func(ctx context.Context, payload json.RawMessage, sw handler.StreamWriter) (any, error) {
+		start := time.Now()
+		res, err := Live(ctx, payload, sw)
+		dur := time.Since(start).Milliseconds()
+		entry := audit.Entry{
+			DeviceID: d.DeviceID, Type: "live",
+			DurationMs: dur, Allowed: audit.Allowed(),
+		}
+		if err != nil {
+			entry.Error = err.Error()
+		}
+		d.Audit.Log(entry)
+		return res, err
+	}
+}
 

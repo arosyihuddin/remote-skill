@@ -25,7 +25,7 @@ type PendingResponse struct {
 	id      string
 	Stream  chan proto.Frame // chunks for streaming requests; closed when done
 	Final   chan proto.Frame // final response frame
-	stream  bool
+	CLIConn *websocket.Conn  // CLI connection for binary frame forwarding (live sessions)
 	closed  bool
 	closeMu sync.Mutex
 }
@@ -37,7 +37,9 @@ func (p *PendingResponse) closeStream() {
 		return
 	}
 	p.closed = true
-	close(p.Stream)
+	if p.Stream != nil {
+		close(p.Stream)
+	}
 }
 
 // Device is a connected node.
@@ -66,7 +68,7 @@ func (d *Device) writeFrame(ctx context.Context, f proto.Frame) error {
 
 // SendRequest sends a typed request and registers a pending response slot.
 // Caller must drain Final (and Stream if streaming) and call cleanup().
-func (d *Device) SendRequest(ctx context.Context, t proto.MessageType, payload any, streaming bool) (*PendingResponse, func(), error) {
+func (d *Device) SendRequest(ctx context.Context, t proto.MessageType, payload any) (*PendingResponse, func(), error) {
 	id := uuid.NewString()
 	pl, err := json.Marshal(payload)
 	if err != nil {
@@ -76,7 +78,6 @@ func (d *Device) SendRequest(ctx context.Context, t proto.MessageType, payload a
 		id:     id,
 		Stream: make(chan proto.Frame, 256),
 		Final:  make(chan proto.Frame, 1),
-		stream: streaming,
 	}
 	d.pending.Store(id, pr)
 	cleanup := func() {
@@ -93,6 +94,16 @@ func (d *Device) SendRequest(ctx context.Context, t proto.MessageType, payload a
 // dispatchFrame is called by the read loop to deliver an incoming frame
 // to the right pending response.
 func (d *Device) dispatchFrame(f proto.Frame) {
+	if f.Type == "binary" {
+		d.pending.Range(func(_, value any) bool {
+			pr := value.(*PendingResponse)
+			if pr.CLIConn != nil {
+				_ = pr.CLIConn.Write(context.Background(), websocket.MessageBinary, f.Payload)
+			}
+			return false
+		})
+		return
+	}
 	if f.ID == "" {
 		return
 	}
@@ -186,9 +197,13 @@ func (b *Broker) List() []DeviceInfo {
 // HandleAgentFrames runs the read loop. Returns when the connection closes.
 func (b *Broker) HandleAgentFrames(ctx context.Context, d *Device) error {
 	for {
-		_, data, err := d.Conn.Read(ctx)
+		msgType, data, err := d.Conn.Read(ctx)
 		if err != nil {
 			return err
+		}
+		if msgType == websocket.MessageBinary {
+			d.dispatchFrame(proto.Frame{Type: "binary", Payload: data})
+			continue
 		}
 		var f proto.Frame
 		if err := json.Unmarshal(data, &f); err != nil {
@@ -338,15 +353,7 @@ func (b *Broker) HandleCLI(ctx context.Context, c *websocket.Conn, serverToken s
 		return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeError, ID: req.ID, Payload: ep})
 	}
 
-	streaming := false
-	if req.Type == proto.TypeExec {
-		var er proto.ExecRequest
-		if json.Unmarshal(req.Payload, &er) == nil {
-			streaming = er.Stream
-		}
-	}
-
-	pr, cleanup, err := dev.SendRequest(reqCtx, req.Type, json.RawMessage(req.Payload), streaming)
+	pr, cleanup, err := dev.SendRequest(reqCtx, req.Type, json.RawMessage(req.Payload))
 	if err != nil {
 		ep, _ := json.Marshal(proto.ErrorPayload{Code: "proxy", Message: err.Error()})
 		return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeError, ID: req.ID, Payload: ep})
@@ -374,6 +381,221 @@ func (b *Broker) HandleCLI(ctx context.Context, c *websocket.Conn, serverToken s
 	}
 }
 
+// HandleLiveSession handles a browser-based live terminal WebSocket connection.
+// Unlike HandleLiveCLI, it does not validate the token — session auth is handled
+// by the caller (auth middleware). Device ID is obtained from the hello frame.
+func (b *Broker) HandleLiveSession(ctx context.Context, c *websocket.Conn) error {
+	// Read hello
+	readCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	f, err := readOneFrame(readCtx, c)
+	cancel()
+	if err != nil {
+		return fmt.Errorf("read hello: %w", err)
+	}
+	if f.Type != proto.TypeHello {
+		return fmt.Errorf("expected hello, got %s", f.Type)
+	}
+	var hello proto.Hello
+	if err := json.Unmarshal(f.Payload, &hello); err != nil {
+		return fmt.Errorf("bad hello: %w", err)
+	}
+
+	// Ack
+	ackPL, _ := json.Marshal(proto.Ack{OK: true})
+	ackFrame, _ := json.Marshal(proto.Frame{Type: proto.TypeAck, ID: f.ID, Payload: ackPL})
+	if err := c.Write(ctx, websocket.MessageText, ackFrame); err != nil {
+		return fmt.Errorf("ack: %w", err)
+	}
+
+	// Read live request
+	readCtx2, readCancel := context.WithTimeout(ctx, 30*time.Second)
+	req, err := readOneFrame(readCtx2, c)
+	readCancel()
+	if err != nil {
+		return fmt.Errorf("read request: %w", err)
+	}
+	if req.Type != proto.TypeLive {
+		return fmt.Errorf("expected live, got %s", req.Type)
+	}
+
+	// Pick device
+	deviceID, err := b.PickDeviceID(hello.DeviceID)
+	if err != nil {
+		ep, _ := json.Marshal(proto.ErrorPayload{Code: "device", Message: err.Error()})
+		return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeError, ID: req.ID, Payload: ep})
+	}
+
+	// Forward live request to device
+	dev := b.Get(deviceID)
+	if dev == nil {
+		ep, _ := json.Marshal(proto.ErrorPayload{Code: "device", Message: "device disconnected"})
+		return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeError, ID: req.ID, Payload: ep})
+	}
+
+	liveCtx, liveCancel := context.WithCancel(ctx)
+	defer liveCancel()
+
+	// Send live request to agent
+	if err := dev.writeFrame(liveCtx, proto.Frame{Type: req.Type, ID: req.ID, Payload: req.Payload}); err != nil {
+		ep, _ := json.Marshal(proto.ErrorPayload{Code: "proxy", Message: err.Error()})
+		return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeError, ID: req.ID, Payload: ep})
+	}
+
+	// Register pending response for final response from agent
+	pr := &PendingResponse{
+		id:      req.ID,
+		Final:   make(chan proto.Frame, 1),
+		CLIConn: c,
+	}
+	dev.pending.Store(req.ID, pr)
+	defer func() {
+		dev.pending.Delete(req.ID)
+	}()
+
+	// Browser -> Agent: forward binary frames (input/resize)
+	go func() {
+		for {
+			msgType, data, err := c.Read(liveCtx)
+			if err != nil {
+				liveCancel()
+				return
+			}
+			if msgType == websocket.MessageBinary {
+				_ = dev.Conn.Write(liveCtx, websocket.MessageBinary, data)
+			}
+		}
+	}()
+
+	// Agent -> Browser: wait for final response
+	for {
+		select {
+		case <-liveCtx.Done():
+			return nil
+		case final := <-pr.Final:
+			if final.Type == proto.TypeError {
+				var ep proto.ErrorPayload
+				_ = json.Unmarshal(final.Payload, &ep)
+				exitFrame := []byte{proto.BinaryFrameExit}
+				_ = c.Write(ctx, websocket.MessageBinary, append(exitFrame, []byte(ep.Message)...))
+			} else {
+				exitFrame := []byte{proto.BinaryFrameExit}
+				_ = c.Write(ctx, websocket.MessageBinary, exitFrame)
+			}
+			return nil
+		}
+	}
+}
+
+// HandleLiveCLI handles a long-lived live terminal WebSocket connection.
+// It proxies frames bidirectionally between CLI and agent.
+func (b *Broker) HandleLiveCLI(ctx context.Context, c *websocket.Conn, serverToken string) error {
+	// Read hello
+	readCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	f, err := readOneFrame(readCtx, c)
+	cancel()
+	if err != nil {
+		return fmt.Errorf("read hello: %w", err)
+	}
+	if f.Type != proto.TypeHello {
+		return fmt.Errorf("expected hello, got %s", f.Type)
+	}
+	var hello proto.Hello
+	if err := json.Unmarshal(f.Payload, &hello); err != nil {
+		return fmt.Errorf("bad hello: %w", err)
+	}
+	if hello.Token != serverToken {
+		return fmt.Errorf("bad token")
+	}
+	if hello.Role != proto.RoleCLI {
+		return fmt.Errorf("expected role cli, got %s", hello.Role)
+	}
+
+	// Ack
+	ackPL, _ := json.Marshal(proto.Ack{OK: true})
+	ackFrame, _ := json.Marshal(proto.Frame{Type: proto.TypeAck, ID: f.ID, Payload: ackPL})
+	if err := c.Write(ctx, websocket.MessageText, ackFrame); err != nil {
+		return fmt.Errorf("ack: %w", err)
+	}
+
+	// Read live request
+	readCtx, readCancel := context.WithTimeout(ctx, 30*time.Second)
+	req, err := readOneFrame(readCtx, c)
+	readCancel()
+	if err != nil {
+		return fmt.Errorf("read request: %w", err)
+	}
+	if req.Type != proto.TypeLive {
+		return fmt.Errorf("expected live, got %s", req.Type)
+	}
+
+	// Pick device
+	deviceID, err := b.PickDeviceID(hello.DeviceID)
+	if err != nil {
+		ep, _ := json.Marshal(proto.ErrorPayload{Code: "device", Message: err.Error()})
+		return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeError, ID: req.ID, Payload: ep})
+	}
+
+	// Forward live request to device
+	dev := b.Get(deviceID)
+	if dev == nil {
+		ep, _ := json.Marshal(proto.ErrorPayload{Code: "device", Message: "device disconnected"})
+		return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeError, ID: req.ID, Payload: ep})
+	}
+
+	liveCtx, liveCancel := context.WithCancel(ctx)
+	defer liveCancel()
+
+	// Send live request to agent
+	if err := dev.writeFrame(liveCtx, proto.Frame{Type: proto.TypeLive, ID: req.ID, Payload: req.Payload}); err != nil {
+		ep, _ := json.Marshal(proto.ErrorPayload{Code: "proxy", Message: err.Error()})
+		return writeOneFrame(ctx, c, proto.Frame{Type: proto.TypeError, ID: req.ID, Payload: ep})
+	}
+
+	// Register pending response for final response from agent
+	pr := &PendingResponse{
+		id:      req.ID,
+		Final:   make(chan proto.Frame, 1),
+		CLIConn: c,
+	}
+	dev.pending.Store(req.ID, pr)
+	defer func() {
+		dev.pending.Delete(req.ID)
+	}()
+
+	// CLI -> Agent: forward binary frames (input/resize)
+	go func() {
+		for {
+			msgType, data, err := c.Read(liveCtx)
+			if err != nil {
+				liveCancel()
+				return
+			}
+			if msgType == websocket.MessageBinary {
+				_ = dev.Conn.Write(liveCtx, websocket.MessageBinary, data)
+			}
+		}
+	}()
+
+	// Agent -> CLI: wait for final response (output forwarded via dispatchFrame binary passthrough)
+	for {
+		select {
+		case <-liveCtx.Done():
+			return nil
+		case final := <-pr.Final:
+			if final.Type == proto.TypeError {
+				var ep proto.ErrorPayload
+				_ = json.Unmarshal(final.Payload, &ep)
+				exitFrame := []byte{proto.BinaryFrameExit}
+				_ = c.Write(ctx, websocket.MessageBinary, append(exitFrame, []byte(ep.Message)...))
+			} else {
+				exitFrame := []byte{proto.BinaryFrameExit}
+				_ = c.Write(ctx, websocket.MessageBinary, exitFrame)
+			}
+			return nil
+		}
+	}
+}
+
 // ErrDeviceNotFound is returned when the requested device ID is not connected.
 var ErrDeviceNotFound = errors.New("device not connected")
 
@@ -383,7 +605,7 @@ func (b *Broker) Call(ctx context.Context, deviceID string, t proto.MessageType,
 	if d == nil {
 		return fmt.Errorf("%w: %s", ErrDeviceNotFound, deviceID)
 	}
-	pr, cleanup, err := d.SendRequest(ctx, t, payload, false)
+	pr, cleanup, err := d.SendRequest(ctx, t, payload)
 	if err != nil {
 		return err
 	}
